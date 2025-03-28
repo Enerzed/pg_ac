@@ -1,0 +1,5 @@
+# AhoCorasick extension
+comment = 'PostgreSQL extension for full text search'
+default_version = '0.1'
+module_pathname = '$libdir/AhoCorasick'
+relocatable = true
