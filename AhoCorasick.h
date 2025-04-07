@@ -6,8 +6,8 @@
 #pragma once
 
 
-#include "postgres.h"
-#include "fmgr.h"
+//#include "postgres.h"
+//#include "fmgr.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -16,43 +16,33 @@
 #include <stdint.h>
 
 
-#define STATE_GET(ahocorasick, state) ((ahocorasick)->state_array[(state)])
+//PG_MODULE_MAGIC;
 
 
-typedef struct ahocorasick_state_s 
+#define MAX_CHILDREN 64
+#define MAX_STATES 2048
+
+
+typedef struct
 {
-	size_t childs[256];
+	struct AhoCorasickState* children[MAX_CHILDREN];
+	struct AhoCorasickState* fail_link;
+	struct AhoCorasickState* output_link;
+	int index;
+	bool is_root;
+	bool is_final;
 
-	size_t *output_array;
-	size_t output_array_count;
-	size_t output_array_size;
-} ahocorasick_state_t;
-
-
-typedef struct ahocorasick_s 
-{
-	ahocorasick_state_t *state_array;
-	size_t state_array_count;
-	size_t state_array_size;
-} ahocorasick_t;
+} AhoCorasickState;
 
 
-typedef struct ahocorasick_match_s 
-{
-	const char *input;
-	size_t len;
+AhoCorasickState* AhoCorasickCreateState();
 
-	size_t state;
-	size_t output;
-} ahocorasick_match_t;
+void AhoCorasickAddKeyword(AhoCorasickState* root, const char* keyword, const int index);
 
+void AhoCorasickBuildFailLinks(AhoCorasickState* root);
 
-bool ahocorasick_init(ahocorasick_t *ahocorasick);
-bool ahocorasick_add_keyword(ahocorasick_t *ahocorasick, const char *str, size_t len, size_t output);
-bool ahocorasick_finalize(ahocorasick_t *ahocorasick);
-bool ahocorasick_match_init(ahocorasick_match_t *match, const char *input, size_t len);
-bool ahocorasick_match(ahocorasick_t *ahocorasick, ahocorasick_match_t *match, size_t *output);
-bool ahocorasick_clean(ahocorasick_t *ahocorasick);
+int AhoCorasickMatch(AhoCorasickState* root, const char* text, int** matchIndices);
 
-bool ahocorasick_to_dot(ahocorasick_t *ahocorasick, FILE *f);
-size_t ahocorasick_size(ahocorasick_t *ahocorasick);
+void AhoCorasickFreeTrie(AhoCorasickState* trie);
+
+AhoCorasickState* AhoCorasickCreateTrie(const char** keywords, int size);

@@ -6,229 +6,156 @@
 #include "AhoCorasick.h"
 
 
-bool ahocorasick_add_state(ahocorasick_t *ahocorasick) {
-	if(!ahocorasick) {
-		return false;
+AhoCorasickState* AhoCorasickCreateState()
+{
+	AhoCorasickState* state = (AhoCorasickState*) malloc(sizeof(AhoCorasickState));
+	if (state == NULL)
+	{
+		return NULL;
 	}
-
-	if(!ahocorasick->state_array) {
-		ahocorasick->state_array_count = 0;
-		ahocorasick->state_array_size = 8;
-		ahocorasick->state_array = calloc(ahocorasick->state_array_size, sizeof(*ahocorasick->state_array));
-	} else if(ahocorasick->state_array_count == ahocorasick->state_array_size) {
-		ahocorasick->state_array_size *= 2;
-		ahocorasick->state_array = realloc(ahocorasick->state_array, ahocorasick->state_array_size*sizeof(*ahocorasick->state_array));
-		memset(ahocorasick->state_array + ahocorasick->state_array_count, 0, ahocorasick->state_array_count * sizeof(*ahocorasick->state_array));
+	state->is_root = false;
+	state->is_final = false;
+	state->index = -1;
+	state->fail_link = NULL;
+	for (int i = 0; i < MAX_CHILDREN; i++)
+	{
+		state->children[i] = NULL;
 	}
-
-	ahocorasick->state_array_count++;
-
-	return true;
+	return state;
 }
 
-bool ahocorasick_state_add_output(ahocorasick_t *ahocorasick, size_t state, size_t output) {
-	if(!ahocorasick) {
-		return false;
-	}
-
-	if(!STATE_GET(ahocorasick, state).output_array) {
-		STATE_GET(ahocorasick, state).output_array_count = 0;
-		STATE_GET(ahocorasick, state).output_array_size = 2;
-		STATE_GET(ahocorasick, state).output_array = calloc(STATE_GET(ahocorasick, state).output_array_size, sizeof(*STATE_GET(ahocorasick, state).output_array));
-	} else if(STATE_GET(ahocorasick, state).output_array_count == STATE_GET(ahocorasick, state).output_array_size) {
-		STATE_GET(ahocorasick, state).output_array_size *= 2;
-		STATE_GET(ahocorasick, state).output_array = realloc(STATE_GET(ahocorasick, state).output_array, STATE_GET(ahocorasick, state).output_array_size*sizeof(*STATE_GET(ahocorasick, state).output_array));
-		memset(STATE_GET(ahocorasick, state).output_array + STATE_GET(ahocorasick, state).output_array_count, 0, STATE_GET(ahocorasick, state).output_array_count * sizeof(*STATE_GET(ahocorasick, state).output_array));
-	}
-
-	STATE_GET(ahocorasick, state).output_array[STATE_GET(ahocorasick, state).output_array_count] = output;
-	STATE_GET(ahocorasick, state).output_array_count++;
-
-	return true;
+void AhoCorasickAddKeyword(AhoCorasickState* root, const char* keyword, const int index)
+{
+	AhoCorasickState* current = root;
+    for (int i = 0; keyword[i]!= '\0'; i++)
+    {
+        if (current->children[keyword[i]] == NULL)
+        {
+            current->children[keyword[i]] = AhoCorasickCreateState();
+        }
+        current = current->children[keyword[i]];
+    }
+    current->is_final = true;
+    current->index = index;
 }
 
-bool ahocorasick_state_add_keyword(ahocorasick_t *ahocorasick, size_t state, const char *str, size_t len, size_t output) {
-	if(!ahocorasick) {
-		return false;
-	}
 
-	if(len <= 0) {
-		return ahocorasick_state_add_output(ahocorasick, state, output);
-	}
+void AhoCorasickBuildFailLinks(AhoCorasickState* root)
+{
+	int queueCapacity= 16;
+	int queueSize = 0;
+	AhoCorasickState** queue = (AhoCorasickState**) malloc(queueCapacity * sizeof(AhoCorasickState*));
+	int front = 0, rear = 0;
+	queue[rear++] = root;
+	queueSize++;
 
-	if(!STATE_GET(ahocorasick, state).childs[(uint8_t)str[0]]) {
-		if(!ahocorasick_add_state(ahocorasick)) {
-			return false;
-		}
-		STATE_GET(ahocorasick, state).childs[(uint8_t)str[0]] = ahocorasick->state_array_count - 1;
-	}
-
-	return ahocorasick_state_add_keyword(ahocorasick, STATE_GET(ahocorasick, state).childs[(uint8_t)str[0]], str + 1, len - 1, output);
-}
-
-bool ahocorasick_init(ahocorasick_t *ahocorasick) {
-	if(!ahocorasick) {
-		return false;
-	}
-
-	memset(ahocorasick, 0, sizeof(*ahocorasick));
-
-	return true;
-}
-
-bool ahocorasick_add_keyword(ahocorasick_t *ahocorasick, const char *str, size_t len, size_t output) {
-	if(!ahocorasick || !str) {
-		return false;
-	}
-
-	if(!ahocorasick->state_array && !ahocorasick_add_state(ahocorasick)) {
-		return false;
-	}
-
-	return ahocorasick_state_add_keyword(ahocorasick, 0, str, len, output);
-}
-
-bool ahocorasick_finalize(ahocorasick_t *ahocorasick) {
-	if(!ahocorasick) {
-		return false;
-	}
-
-	size_t i, k, *queue = NULL, *fail = NULL, read = 0, write = 0, state = 0, r = 0, s = 0;
-	queue = calloc(ahocorasick->state_array_count, sizeof(ahocorasick->state_array[0].childs[0]));
-	fail = calloc(ahocorasick->state_array_count, sizeof(ahocorasick->state_array[0].childs[0]));
-
-	for(i = 0; i < 256; i++) {
-		if(ahocorasick->state_array[0].childs[i]) {
-			queue[write] = ahocorasick->state_array[0].childs[i];
-			write++;
-		}
-	}
-
-	while(write > read) {
-		r = queue[read];
-		read++;
-
-		for(i = 0; i < 256; i++) {
-			s = STATE_GET(ahocorasick, r).childs[i];
-			if(s) {
-				queue[write] = s;
-				write++;
-
-				state = fail[r];
-				while(state && !STATE_GET(ahocorasick, state).childs[i] && fail[state]) {
-					state = fail[state];
+	while(front < rear)
+	{
+		AhoCorasickState* current = queue[front++];
+        for (int i = 0; i < MAX_CHILDREN; i++)
+		{
+			AhoCorasickState* child = current->children[i];
+			if (child && current == root)
+			{
+				child->fail_link = root;
+			}
+			else if (child)
+			{
+				AhoCorasickState* fail = current->fail_link;
+                while(fail && !fail->children[i])
+				{
+					fail = fail->fail_link;
 				}
-				fail[s] = STATE_GET(ahocorasick, state).childs[i];
-
-				for(k = 0; k < STATE_GET(ahocorasick, fail[s]).output_array_count; k++) {
-					ahocorasick_state_add_output(ahocorasick, s, STATE_GET(ahocorasick, fail[s]).output_array[k]);
+				if (fail)
+				{
+					child->fail_link = fail->children[i];
 				}
-			} else {
-				STATE_GET(ahocorasick, r).childs[i] = STATE_GET(ahocorasick, fail[r]).childs[i];
+				else 
+				{
+					child->fail_link = root;
+				}
+			}
+			if (child)
+			{
+				if (queueSize == queueCapacity)
+				{
+					queueCapacity *= 2;
+					queue = (AhoCorasickState**) realloc(queue, queueCapacity * sizeof(AhoCorasickState*));
+				}
+				queue[rear++] = child;
+				queueSize++;
 			}
 		}
 	}
-
-	free(fail);
 	free(queue);
-
-	for(i = 0; i < ahocorasick->state_array_count; i++) {
-		ahocorasick->state_array[i].output_array = realloc(ahocorasick->state_array[i].output_array, ahocorasick->state_array[i].output_array_count * sizeof(*ahocorasick->state_array[i].output_array));
-		ahocorasick->state_array[i].output_array_size = ahocorasick->state_array[i].output_array_count;
-	}
-
-	ahocorasick->state_array = realloc(ahocorasick->state_array, ahocorasick->state_array_count*sizeof(*ahocorasick->state_array));
-	ahocorasick->state_array_size = ahocorasick->state_array_count;
-
-	return true;
 }
 
-bool ahocorasick_clean(ahocorasick_t *ahocorasick) {
-	size_t i;
-	for(i = 0; i < ahocorasick->state_array_count; i++) {
-		if(STATE_GET(ahocorasick, i).output_array) {
-			free(STATE_GET(ahocorasick, i).output_array);
-			STATE_GET(ahocorasick, i).output_array_count = 0;
-			STATE_GET(ahocorasick, i).output_array_size = 0;
+int AhoCorasickMatch(AhoCorasickState* root, const char* text, int** matchIndices)
+{
+	AhoCorasickState* current = root;
+	int textLength = strlen(text);
+	int matchIndicesCapacity = 16;
+	int numMatches = 0;
+	*matchIndices = (int*) malloc(matchIndicesCapacity * sizeof(int));
+
+	for (int i = 0; i < textLength; i++)
+	{
+		while (current && !current->children[text[i]])
+		{
+			current = current->fail_link;
 		}
-	}
-	free(ahocorasick->state_array);
-	ahocorasick->state_array_count = 0;
-	ahocorasick->state_array_size = 0;
-
-	return ahocorasick_init(ahocorasick);
-}
-
-bool ahocorasick_match_init(ahocorasick_match_t *match, const char *input, size_t len) {
-	if(!match || !len) {
-		return false;
-	}
-
-	memset(match, 0, sizeof(*match));
-
-	match->input = input;
-	match->len = len;
-
-	return true;
-}
-
-bool ahocorasick_match(ahocorasick_t *ahocorasick, ahocorasick_match_t *match, size_t *output) {
-	if(!ahocorasick || !match) {
-		return false;
-	}
-
-	if(match->len <= 0) {
-		return false;
-	}
-
-	while(match->len > 0 && match->output >= ahocorasick->state_array[match->state].output_array_count) {
-		match->state = ahocorasick->state_array[match->state].childs[(uint8_t)match->input[0]];
-		match->output = 0;
-		match->input++;
-		match->len--;
-	}
-
-	if(match->output < ahocorasick->state_array[match->state].output_array_count) {
-		if(output) {
-			*output = ahocorasick->state_array[match->state].output_array[match->output];
+		if (current)
+		{
+			current = current->children[text[i]];
 		}
-		match->output++;
-		return true;
-	}
-	return false;
-}
-
-bool ahocorasick_to_dot(ahocorasick_t *ahocorasick, FILE *f) {
-	if(!ahocorasick || !f) {
-		return false;
-	}
-
-	fprintf(f, "digraph G {\n");
-
-	size_t i, j;
-	for(i = 0; i < ahocorasick->state_array_count; i++) {
-		if(ahocorasick->state_array[i].output_array_count > 0) {
-			fprintf(f, "\t%lu [shape=doublecircle]\n", i);
+		else
+		{
+			current = root;
 		}
-		for(j = 0; j < 256; j++) {
-			if(ahocorasick->state_array[i].childs[j]) {
-				fprintf(f, "\t%lu -> %lu [label=\"%c\"];\n", i, ahocorasick->state_array[i].childs[j], (char)j);
+		AhoCorasickState* temp = current;
+		while (temp && temp->is_final)
+		{
+			if (numMatches == matchIndicesCapacity)
+			{
+				matchIndicesCapacity *= 2;
+                *matchIndices = (int*) realloc(*matchIndices, matchIndicesCapacity * sizeof(int));
 			}
+			(*matchIndices)[numMatches++] = temp->index;
+			temp = temp->fail_link;
 		}
 	}
-
-	fprintf(f, "}\n");
-
-	return true;
+	return numMatches;
 }
 
-size_t ahocorasick_size(ahocorasick_t *ahocorasick) {
-	size_t size = 0, i;
-	for(i = 0; i < ahocorasick->state_array_count; i++) {
-		size += sizeof(*ahocorasick->state_array[i].output_array) * ahocorasick->state_array[i].output_array_size;
+void AhoCorasickFreeTrie(AhoCorasickState* current)
+{
+	if (current == NULL)
+	{
+		return;
 	}
-	size += sizeof(*ahocorasick->state_array) * ahocorasick->state_array_size;
-	size += sizeof(*ahocorasick);
+	for (int i = 0; i < MAX_CHILDREN; i++)
+	{
+		if (current->children[i] != NULL)
+		{
+			AhoCorasickFreeTrie(current->children[i]);
+		}
+	}
+	free(current);
+}
 
-	return size;
+AhoCorasickState* AhoCorasickCreateTrie(const char** keywords, int size)
+{
+	AhoCorasickState* root = AhoCorasickCreateState();
+	if (root == NULL)
+	{
+		return NULL;
+	}
+
+    for (int i = 0; i < size; i++)
+    {
+		int keywordLength = strlen(keywords[i]);
+        AhoCorasickAddKeyword(root, keywords[i], i);
+    }
+    AhoCorasickBuildFailLinks(root);
+    return root;
 }
