@@ -12,9 +12,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
-#include <string.h>
 #include <stdint.h>
-
+#include <string.h>
+#include <ctype.h>
 
 //PG_MODULE_MAGIC;
 
@@ -44,7 +44,7 @@ void AhoCorasickBuildFailLinks(AhoCorasickState* root);
 
 void AhoCorasickBuildDictionaryLinks(AhoCorasickState* root);
 
-int AhoCorasickMatch(AhoCorasickState* root, const char* text, int** matchIndices);
+int AhoCorasickMatch(AhoCorasickState* root, char* text, int** matchIndices, bool isCaseSensitive);
 
 void AhoCorasickFreeTrie(AhoCorasickState* trie);
 

@@ -10,4 +10,4 @@
 #include $(PGXS)
 
 all:
-	clang main.c AhoCorasick.c -o main
+	clang main.c AhoCorasick.c -o main.out

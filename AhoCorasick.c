@@ -114,7 +114,8 @@ void AhoCorasickBuildDictionaryLinks(AhoCorasickState* root)
     }
     
     // BFS traversal to set dictionary links
-    while (front < rear) {
+    while (front < rear) 
+	{
         AhoCorasickState* current = queue[front++];
         AhoCorasickState* fail = current->fail_link;
         // Set dictionary link
@@ -150,34 +151,51 @@ void AhoCorasickBuildDictionaryLinks(AhoCorasickState* root)
 }
 
 
-int AhoCorasickMatch(AhoCorasickState* root, const char* text, int** matchIndices)
+int AhoCorasickMatch(AhoCorasickState* root, char* text, int** matchIndices, bool isCaseSensitive)
 {
     AhoCorasickState* current = root;
     int textLength = strlen(text);
     int matchIndicesCapacity = 16;
     int numMatches = 0;
     *matchIndices = (int*)malloc(matchIndicesCapacity * sizeof(int));
+    
+    char* processedText = text;  // Default to original text
+    
+    // Create a lowercase copy if case insensitive
+    if (!isCaseSensitive) 
+    {
+        processedText = (char*)malloc(textLength + 1);
+        for (int i = 0; i < textLength; i++) 
+        {
+            processedText[i] = tolower(text[i]);
+        }
+        processedText[textLength] = '\0';
+    }
 
     for (int i = 0; i < textLength; i++) 
-	{
-        while (current && !current->children[(unsigned char)text[i]]) 
-		{
+    {	
+        // Move to fail link
+        while (current && !current->children[(unsigned char)processedText[i]]) 
+        {
             current = current->fail_link;
         }
-        
         if (current)
-		{
-            current = current->children[(unsigned char)text[i]];
-        } else 
-		{
+        {
+            current = current->children[(unsigned char)processedText[i]];
+        } 
+        else 
+        {
             current = root;
         }
         
         // Check for matches using dictionary links
         AhoCorasickState* temp = current;
-        while (temp) {
-            if (temp->is_final) {
-                if (numMatches == matchIndicesCapacity) {
+        while (temp) 
+        {
+            if (temp->is_final) 
+            {
+                if (numMatches == matchIndicesCapacity) 
+                {
                     matchIndicesCapacity *= 2;
                     *matchIndices = (int*)realloc(*matchIndices, matchIndicesCapacity * sizeof(int));
                 }
@@ -185,6 +203,12 @@ int AhoCorasickMatch(AhoCorasickState* root, const char* text, int** matchIndice
             }
             temp = temp->dictionary_link;
         }
+    }
+    
+    // Free the temporary lowercase string if we created one
+    if (!isCaseSensitive) 
+    {
+        free(processedText);
     }
     
     return numMatches;
