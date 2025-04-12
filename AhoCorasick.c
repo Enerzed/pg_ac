@@ -24,6 +24,7 @@ AhoCorasickState* AhoCorasickCreateState()
 	return state;
 }
 
+
 void AhoCorasickAddKeyword(AhoCorasickState* root, const char* keyword, const int index)
 {
 	AhoCorasickState* current = root;
@@ -90,42 +91,105 @@ void AhoCorasickBuildFailLinks(AhoCorasickState* root)
 	free(queue);
 }
 
-int AhoCorasickMatch(AhoCorasickState* root, const char* text, int** matchIndices)
-{
-	AhoCorasickState* current = root;
-	int textLength = strlen(text);
-	int matchIndicesCapacity = 16;
-	int numMatches = 0;
-	*matchIndices = (int*) malloc(matchIndicesCapacity * sizeof(int));
 
-	for (int i = 0; i < textLength; i++)
+void AhoCorasickBuildDictionaryLinks(AhoCorasickState* root)
+{
+    int queueCapacity = 16;
+    int queueSize = 0;
+    AhoCorasickState** queue = (AhoCorasickState**)malloc(queueCapacity * sizeof(AhoCorasickState*));
+    int front = 0, rear = 0;
+    
+    // Initialize queue with root's children
+    for (int i = 0; i < MAX_CHILDREN; i++) 
 	{
-		while (current && !current->children[text[i]])
+        if (root->children[i]) {
+            if (queueSize == queueCapacity) 
+			{
+                queueCapacity *= 2;
+                queue = (AhoCorasickState**)realloc(queue, queueCapacity * sizeof(AhoCorasickState*));
+            }
+            queue[rear++] = root->children[i];
+            queueSize++;
+        }
+    }
+    
+    // BFS traversal to set dictionary links
+    while (front < rear) {
+        AhoCorasickState* current = queue[front++];
+        AhoCorasickState* fail = current->fail_link;
+        // Set dictionary link
+        if (fail && fail->is_final)
 		{
-			current = current->fail_link;
-		}
-		if (current)
+            current->dictionary_link = current->fail_link;
+        } 
+		else if (current->fail_link && fail->dictionary_link)
 		{
-			current = current->children[text[i]];
-		}
+            current->dictionary_link = fail->dictionary_link;
+        } 
 		else
 		{
-			current = root;
-		}
-		AhoCorasickState* temp = current;
-		while (temp && temp->is_final)
+            current->dictionary_link = NULL;
+        }
+        
+        // Add children to queue
+        for (int i = 0; i < MAX_CHILDREN; i++) 
 		{
-			if (numMatches == matchIndicesCapacity)
-			{
-				matchIndicesCapacity *= 2;
-                *matchIndices = (int*) realloc(*matchIndices, matchIndicesCapacity * sizeof(int));
-			}
-			(*matchIndices)[numMatches++] = temp->index;
-			temp = temp->fail_link;
-		}
-	}
-	return numMatches;
+            if (current->children[i]) {
+                if (queueSize == queueCapacity) 
+				{
+                    queueCapacity *= 2;
+                    queue = (AhoCorasickState**)realloc(queue, queueCapacity * sizeof(AhoCorasickState*));
+                }
+                queue[rear++] = current->children[i];
+                queueSize++;
+            }
+        }
+    }
+    
+    free(queue);
 }
+
+
+int AhoCorasickMatch(AhoCorasickState* root, const char* text, int** matchIndices)
+{
+    AhoCorasickState* current = root;
+    int textLength = strlen(text);
+    int matchIndicesCapacity = 16;
+    int numMatches = 0;
+    *matchIndices = (int*)malloc(matchIndicesCapacity * sizeof(int));
+
+    for (int i = 0; i < textLength; i++) 
+	{
+        while (current && !current->children[(unsigned char)text[i]]) 
+		{
+            current = current->fail_link;
+        }
+        
+        if (current)
+		{
+            current = current->children[(unsigned char)text[i]];
+        } else 
+		{
+            current = root;
+        }
+        
+        // Check for matches using dictionary links
+        AhoCorasickState* temp = current;
+        while (temp) {
+            if (temp->is_final) {
+                if (numMatches == matchIndicesCapacity) {
+                    matchIndicesCapacity *= 2;
+                    *matchIndices = (int*)realloc(*matchIndices, matchIndicesCapacity * sizeof(int));
+                }
+                (*matchIndices)[numMatches++] = temp->index;
+            }
+            temp = temp->dictionary_link;
+        }
+    }
+    
+    return numMatches;
+}
+
 
 void AhoCorasickFreeTrie(AhoCorasickState* current)
 {
@@ -143,6 +207,7 @@ void AhoCorasickFreeTrie(AhoCorasickState* current)
 	free(current);
 }
 
+
 AhoCorasickState* AhoCorasickCreateTrie(const char** keywords, int size)
 {
 	AhoCorasickState* root = AhoCorasickCreateState();
@@ -156,6 +221,22 @@ AhoCorasickState* AhoCorasickCreateTrie(const char** keywords, int size)
 		int keywordLength = strlen(keywords[i]);
         AhoCorasickAddKeyword(root, keywords[i], i);
     }
+
     AhoCorasickBuildFailLinks(root);
+	AhoCorasickBuildDictionaryLinks(root);
+
     return root;
+}
+
+
+void PrintTrie(AhoCorasickState* root)
+{	
+	for (int i = 0; i < MAX_CHILDREN; i++)
+	{
+		if (root->children[i] != NULL)
+		{
+			printf("%c -> %p\n", i, root->children[i]);
+			PrintTrie(root->children[i]);
+		}
+	}
 }

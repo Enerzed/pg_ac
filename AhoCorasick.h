@@ -19,8 +19,7 @@
 //PG_MODULE_MAGIC;
 
 
-#define MAX_CHILDREN 64
-#define MAX_STATES 2048
+#define MAX_CHILDREN 256
 
 
 typedef struct
@@ -28,6 +27,8 @@ typedef struct
 	struct AhoCorasickState* children[MAX_CHILDREN];
 	struct AhoCorasickState* fail_link;
 	struct AhoCorasickState* output_link;
+	struct AhoCorasickState* dictionary_link;
+	struct AhoCorasickState* sibling_link;
 	int index;
 	bool is_root;
 	bool is_final;
@@ -41,8 +42,12 @@ void AhoCorasickAddKeyword(AhoCorasickState* root, const char* keyword, const in
 
 void AhoCorasickBuildFailLinks(AhoCorasickState* root);
 
+void AhoCorasickBuildDictionaryLinks(AhoCorasickState* root);
+
 int AhoCorasickMatch(AhoCorasickState* root, const char* text, int** matchIndices);
 
 void AhoCorasickFreeTrie(AhoCorasickState* trie);
 
 AhoCorasickState* AhoCorasickCreateTrie(const char** keywords, int size);
+
+void PrintTrie(AhoCorasickState* root);
