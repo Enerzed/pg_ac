@@ -174,20 +174,45 @@ int AhoCorasickMatch(AhoCorasickState* root, char* text, int** matchIndices, boo
 
     for (int i = 0; i < textLength; i++) 
     {	
-        // Move to fail link
-        while (current && !current->children[(unsigned char)processedText[i]]) 
+        if (isCaseSensitive)
         {
-            current = current->fail_link;
+            // Move to fail link
+            while (current && !current->children[(unsigned char)processedText[i]])
+            {
+                current = current->fail_link;
+            }
+            if (current)
+            {
+                current = current->children[(unsigned char)processedText[i]];
+            }
+            else 
+            {
+                current = root;
+            }
         }
-        if (current)
+        else
         {
-            current = current->children[(unsigned char)processedText[i]];
-        } 
-        else 
-        {
-            current = root;
+            // Move to fail link
+            while (current && !current->children[(unsigned char)tolower(processedText[i])] && !current->children[(unsigned char)toupper(processedText[i])])
+            {
+                current = current->fail_link;
+            }
+            if (current)
+            {
+                if (current->children[(unsigned char)toupper(processedText[i])])
+                {
+                    current = current->children[(unsigned char)toupper(processedText[i])];
+                }
+                else
+                {
+                    current = current->children[(unsigned char)tolower(processedText[i])];
+                }
+            }
+            else 
+            {
+                current = root;
+            }
         }
-        
         // Check for matches using dictionary links
         AhoCorasickState* temp = current;
         while (temp) 

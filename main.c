@@ -4,7 +4,7 @@
 int main(int argc, char **argv)
 {
     // Create Aho-Corasick trie from a list of keywords
-    const char* dictionary[] = { "a", "ag", "c", "caa", "gag", "gc", "gca" };
+    const char* dictionary[] = { "a", "ag", "c", "caa", "gag", "gc", "Gca" };
     int numKeywords = sizeof(dictionary) / sizeof(dictionary[0]);
 
     AhoCorasickState* root = AhoCorasickCreateTrie(dictionary, numKeywords);
@@ -17,10 +17,10 @@ int main(int argc, char **argv)
     PrintTrie(root);
     
     // Perform pattern matching on a text
-    char* text = "Gcaa";
+    char* text = "gcaa";
     int* matchIndices;
     
-    int numMatches = AhoCorasickMatch(root, text, &matchIndices, true);
+    int numMatches = AhoCorasickMatch(root, text, &matchIndices, false);
 
     // Print the matches
     if (numMatches > 0)
