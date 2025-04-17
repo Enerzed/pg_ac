@@ -6,8 +6,8 @@
 #pragma once
 
 
-//#include "postgres.h"
-//#include "fmgr.h"
+#include "postgres.h"
+#include "fmgr.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -16,7 +16,7 @@
 #include <string.h>
 #include <ctype.h>
 
-//PG_MODULE_MAGIC;
+PG_MODULE_MAGIC;
 
 
 #define MAX_CHILDREN 256

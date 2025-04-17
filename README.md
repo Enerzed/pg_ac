@@ -1,1 +1,1 @@
-Aho-Corasick algorithm for full text search in PosgreSQL
+Aho-Corasick algorithm for full text search in PostgreSQL
