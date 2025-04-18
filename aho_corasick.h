@@ -6,6 +6,8 @@
 #pragma once
 
 
+#include "parser.h"
+
 #include "postgres.h"
 #include "fmgr.h"
 
@@ -16,19 +18,20 @@
 #include <string.h>
 #include <ctype.h>
 
-PG_MODULE_MAGIC;
-
 
 #define MAX_CHILDREN 256
+
+
+PG_MODULE_MAGIC;
 
 
 typedef struct
 {
 	struct AhoCorasickState* children[MAX_CHILDREN];
 	struct AhoCorasickState* fail_link;
-	struct AhoCorasickState* output_link;
+	//struct AhoCorasickState* output_link;
 	struct AhoCorasickState* dictionary_link;
-	struct AhoCorasickState* sibling_link;
+	//struct AhoCorasickState* sibling_link;
 	int index;
 	bool is_root;
 	bool is_final;

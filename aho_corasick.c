@@ -3,7 +3,7 @@
 */
 
 
-#include "AhoCorasick.h"
+#include "aho_corasick.h"
 
 
 AhoCorasickState* AhoCorasickCreateState()

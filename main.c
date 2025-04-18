@@ -1,6 +1,6 @@
-#include "AhoCorasick.h"
+#include "aho_corasick.h"
 
-
+/*
 int main(int argc, char **argv)
 {
     // Create Aho-Corasick trie from a list of keywords
@@ -42,3 +42,4 @@ int main(int argc, char **argv)
     
     return 0;
 }
+*/
