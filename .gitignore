@@ -54,3 +54,7 @@ dkms.conf
 
 # Directories
 .vscode/
+
+# Tests results
+regression.*
+results/
