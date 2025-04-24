@@ -1,0 +1,2 @@
+CREATE EXTENSION pg_ac;
+DROP EXTENSION pg_ac;
