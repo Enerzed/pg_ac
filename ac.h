@@ -13,9 +13,13 @@
 #include "utils/array.h"
 #include "utils/lsyscache.h"
 #include "utils/builtins.h"
-#include "tsearch/ts_utils.h"
+
+#include "tsearch/ts_cache.h"
+#include "tsearch/ts_locale.h"
 #include "tsearch/ts_public.h"
+#include "tsearch/ts_type.h"
 #include "tsearch/ts_utils.h"
+
 #include "catalog/pg_ts_dict.h"
 #include "catalog/namespace.h"
 #include "nodes/parsenodes.h"
