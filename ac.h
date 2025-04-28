@@ -8,6 +8,7 @@
 
 #include "postgres.h"
 #include "fmgr.h"
+
 #include "utils/palloc.h"
 #include "utils/memutils.h"
 #include "utils/array.h"
@@ -24,6 +25,7 @@
 #include "catalog/namespace.h"
 #include "nodes/parsenodes.h"
 #include "access/tupdesc.h"
+#include "common/hashfn.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -52,6 +54,12 @@ typedef struct
 } ac_state;
 
 
+typedef struct SeenEntry 
+{
+    char *key; 
+} SeenEntry;
+
+
 /* Aho Corasick functions */
 ac_state* ac_create_state();
 void ac_add_keyword(ac_state* root, const char* keyword, const int index);
@@ -60,7 +68,13 @@ void ac_build_dictionary_links(ac_state* root);
 int ac_match(ac_state* root, char* text, int** match_indices, bool is_case_sensitive);
 void ac_free_trie(ac_state* trie);
 ac_state* ac_create_trie(const char** keywords, int size);
-void print_trie(ac_state* root);
+bool ac_contains(ac_state *root, const char *token);
+static uint32
+string_hash_helper(const void *key, Size keysize) 
+{
+    return DatumGetUInt32(hash_any((const unsigned char *)key, strlen((const char *)key)));
+}
+void print_trie(ac_state *root);
 
 /* PostgreSQL-specific functions */
 Datum ac_search(PG_FUNCTION_ARGS);

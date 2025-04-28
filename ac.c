@@ -253,6 +253,7 @@ void ac_free_trie(ac_state* current)
 ac_state* ac_create_trie(const char** keywords, int size)
 {
 	ac_state* root = ac_create_state();
+    root->is_root = true;
 	if (root == NULL)
 	{
 		return NULL;
@@ -268,6 +269,20 @@ ac_state* ac_create_trie(const char** keywords, int size)
 	ac_build_dictionary_links(root);
 
     return root;
+}
+
+
+bool ac_contains(ac_state *root, const char *token) 
+{
+    ac_state *current = root;
+    for (int i = 0; token[i] != '\0'; i++) {
+        unsigned char c = (unsigned char)token[i];
+        if (!current->children[c]) {
+            return false;
+        }
+        current = current->children[c];
+    }
+    return current->is_final;
 }
 
 
@@ -294,36 +309,97 @@ Datum ac_search(PG_FUNCTION_ARGS) {
     int keyword_count;
     char **keywords;
     ac_state *root;
-    int num_matches;
-    int *match_indices = NULL;
     StringInfoData buf;
+    HTAB *seen_keywords;
+    HASHCTL hash_ctl;
 
+    // Deconstruct keywords array
     deconstruct_array(keywords_array, TEXTOID, -1, false, 'i', &keyword_datums, &keyword_nulls, &keyword_count);
-    keywords = (char **) palloc(keyword_count * sizeof(char *));
+
+    // Define SeenEntry structure
+    typedef struct SeenEntry {
+        char *key;
+    } SeenEntry;
+
+    // Initialize hash table for deduplication
+    memset(&hash_ctl, 0, sizeof(hash_ctl));
+    hash_ctl.keysize = sizeof(char*);
+    hash_ctl.entrysize = sizeof(SeenEntry);
+    hash_ctl.hash = string_hash_helper;  // Custom hash function
+    hash_ctl.match = (HashCompareFunc)strcmp;
+    hash_ctl.hcxt = CurrentMemoryContext;
+    seen_keywords = hash_create("Seen keywords", keyword_count, &hash_ctl, HASH_ELEM | HASH_FUNCTION | HASH_COMPARE | HASH_CONTEXT);
+
+    keywords = (char **)palloc(keyword_count * sizeof(char *));
+    int unique_count = 0;
+
+    // Normalize and deduplicate keywords
     for (int i = 0; i < keyword_count; i++) {
         if (keyword_nulls[i])
             ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED), errmsg("NULL keyword not allowed")));
-        keywords[i] = TextDatumGetCString(keyword_datums[i]);
+
+        char *orig_keyword = TextDatumGetCString(keyword_datums[i]);
+        char *lower_keyword = (char *)palloc(strlen(orig_keyword) + 1);
+        for (int j = 0; orig_keyword[j]; j++) {
+            lower_keyword[j] = tolower(orig_keyword[j]);
+        }
+        lower_keyword[strlen(orig_keyword)] = '\0';
+
+        bool found;
+        SeenEntry *entry = (SeenEntry *)hash_search(seen_keywords, &lower_keyword, HASH_ENTER, &found);
+        if (!found) {
+            entry->key = lower_keyword;
+            keywords[unique_count++] = lower_keyword;
+        } else {
+            pfree(lower_keyword);
+        }
     }
 
-    root = ac_create_trie((const char **)keywords, keyword_count);
-    num_matches = ac_match(root, text_str, &match_indices, false); // Assume case-insensitive
+    // Build trie with unique keywords
+    root = ac_create_trie((const char **)keywords, unique_count);
 
+    // Tokenize input text into lowercase tokens
     initStringInfo(&buf);
-    for (int i = 0; i < num_matches; i++) {
-        const char *keyword = keywords[match_indices[i]];
-        appendStringInfo(&buf, "%s:%d ", keyword, i + 1);
-    }
-    if (buf.len > 0) buf.data[buf.len - 1] = '\0';
+    StringInfoData token_buf;
+    initStringInfo(&token_buf);
+    int token_pos = 1;
 
+    for (int i = 0; text_str[i] != '\0'; i++) {
+        if (isalnum((unsigned char)text_str[i])) {
+            appendStringInfoChar(&token_buf, tolower(text_str[i]));
+        } else {
+            if (token_buf.len > 0) {
+                if (ac_contains(root, token_buf.data)) {
+                    appendStringInfo(&buf, "%s:%d ", token_buf.data, token_pos);
+                }
+                token_pos++;
+                resetStringInfo(&token_buf);
+            }
+        }
+    }
+
+    // Check last token
+    if (token_buf.len > 0) 
+    {
+        if (ac_contains(root, token_buf.data)) {
+            appendStringInfo(&buf, "%s:%d ", token_buf.data, token_pos);
+        }
+    }
+
+    // Generate TSVector
     text *tsv_text = cstring_to_text(buf.data);
     TSVector tsv = DatumGetTSVector(DirectFunctionCall1(to_tsvector, PointerGetDatum(tsv_text)));
 
+    // Cleanup
     pfree(buf.data);
+    pfree(token_buf.data);
     pfree(text_str);
+    hash_destroy(seen_keywords);
+    for (int i = 0; i < unique_count; i++) {
+        pfree(keywords[i]);
+    }
     pfree(keywords);
     ac_free_trie(root);
-    pfree(match_indices);
 
     PG_RETURN_TSVECTOR(tsv);
 }
