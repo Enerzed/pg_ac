@@ -15,6 +15,7 @@
 #include "utils/lsyscache.h"
 #include "utils/builtins.h"
 #include "utils/hsearch.h"
+#include "utils/jsonb.h"
 
 #include "tsearch/ts_cache.h"
 #include "tsearch/ts_locale.h"
@@ -49,6 +50,7 @@ typedef struct
 	struct ac_state* children[MAX_CHILDREN];
 	struct ac_state* fail_link;
 	struct ac_state* dictionary_link;
+	char *lexeme;
 	int index;
 	bool is_root;
 	bool is_final;
@@ -60,8 +62,7 @@ typedef struct
 typedef struct
 {
     ac_state *root;
-    int32 refcount;
-} AC_Automaton;
+} ac_automaton;
 
 
 extern void _PG_init(void);
@@ -75,13 +76,9 @@ void ac_build_dictionary_links(ac_state* root);
 int ac_match(ac_state* root, char* text, int** match_indices, bool is_case_sensitive);
 void ac_free_trie(ac_state* trie);
 ac_state* ac_create_trie(const char** keywords, int size);
-bool ac_contains(ac_state *root, const char *token);
-static uint32
-string_hash_helper(const void *key, Size keysize) 
-{
-    return DatumGetUInt32(hash_any((const unsigned char *)key, strlen((const char *)key)));
-}
+static bool ac_contains(ac_state *root, const char *token);
 void print_trie(ac_state *root);
+static void ac_automaton_destroy(ac_automaton *automaton);
 
 /* PostgreSQL-specific functions */
 Datum ac_search(PG_FUNCTION_ARGS);

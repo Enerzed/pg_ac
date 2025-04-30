@@ -264,22 +264,24 @@ ac_state* ac_create_trie(const char** keywords, int size)
 }
 
 
-bool ac_contains(ac_state *root, const char *token) 
-{
+/* Aho-Corasick implementation */
+static bool ac_contains(ac_state *root, const char *text) {
     ac_state *current = root;
-    for (int i = 0; token[i] != '\0'; i++) 
-    {
-        unsigned char c = (unsigned char)token[i];
-        if (!current->children[c]) 
-        {
-            return false;
+    for (int i = 0; text[i] != '\0'; i++) {
+        unsigned char c = (unsigned char)text[i];
+        while (current && !current->children[c]) {
+            current = current->fail_link;
         }
-        current = current->children[c];
+        current = current ? current->children[c] : root;
+        
+        for (ac_state *temp = current; temp; temp = temp->dictionary_link) {
+            if (temp->is_final) return true;
+        }
     }
-    return current->is_final;
+    return false;
 }
 
-
+/* TEST FUNCTION (DEPRICATED) */
 void print_trie(ac_state* root)
 {	
 	for (int i = 0; i < MAX_CHILDREN; i++)
@@ -293,67 +295,39 @@ void print_trie(ac_state* root)
 }
 
 
+PG_FUNCTION_INFO_V1(ac_build);
+Datum ac_build(PG_FUNCTION_ARGS) {
+    TSVector tsv = PG_GETARG_TSVECTOR(0);
+    ac_automaton *automaton = palloc0(sizeof(ac_automaton));
+    WordEntry *entries = ARRPTR(tsv);
+    
+    automaton->root = ac_create_state();
+    for (int i = 0; i < tsv->size; i++) {
+        char *lexeme = pnstrdup(STRPTR(tsv) + entries[i].pos, entries[i].len);
+        ac_add_keyword(automaton->root, lexeme, i);
+        pfree(lexeme);
+    }
+    
+    ac_build_failure_links(automaton->root);
+    ac_build_dictionary_links(automaton->root);
+    PG_RETURN_POINTER(automaton);
+}
+
+
 PG_FUNCTION_INFO_V1(ac_search);
-Datum ac_search(PG_FUNCTION_ARGS) 
-{
-    text* text_arg = PG_GETARG_TEXT_PP(0);
-    ArrayType* keywords_array = PG_GETARG_ARRAYTYPE_P(1);
-    char* text_str = text_to_cstring(text_arg);
+Datum ac_search(PG_FUNCTION_ARGS) {
+    ac_automaton *automaton = (ac_automaton *)PG_GETARG_POINTER(0);
+    text *input = PG_GETARG_TEXT_PP(1);
+    char *text_str = text_to_cstring(input);
+    bool found = ac_contains(automaton->root, text_str);
     
-    /* Process keywords */
-    Datum* keyword_datums;
-    bool* keyword_nulls;
-    int num_keywords;
-    deconstruct_array(keywords_array, TEXTOID, -1, false, 'i', &keyword_datums, &keyword_nulls, &num_keywords);
-    
-    char** keywords = palloc(num_keywords * sizeof(char*));
-    HASHCTL hash_ctl = {0};
-    hash_ctl.keysize = sizeof(char*);
-    hash_ctl.entrysize = sizeof(char*);
-    hash_ctl.hash = string_hash;
-    hash_ctl.match = (HashCompareFunc)strcmp;
-    HTAB* seen = hash_create("keywords", num_keywords, &hash_ctl, HASH_ELEM | HASH_FUNCTION | HASH_COMPARE);
-    
-    int unique_count = 0;
-    for (int i = 0; i < num_keywords; i++) 
-    {
-        if (keyword_nulls[i]) continue;
-        char* kw = TextDatumGetCString(keyword_datums[i]);
-        char* lower = palloc(strlen(kw) + 1);
-        for (int j = 0; kw[j]; j++) lower[j] = tolower(kw[j]);
-        lower[strlen(kw)] = '\0';
-        
-        bool found;
-        hash_search(seen, &lower, HASH_ENTER, &found);
-        if (!found) keywords[unique_count++] = lower;
-        else pfree(lower);
-    }
-    
-    ac_state* root = ac_create_trie((const char**)keywords, unique_count);
-    int* matches;
-    int num_matches = ac_match(root, text_str, &matches, false);
-    
-    /* Build TSVector string */
-    StringInfoData buf;
-    initStringInfo(&buf);
-    for (int i = 0; i < num_matches; i++)
-    {
-        appendStringInfo(&buf, "%s:%d ", keywords[matches[i]], i+1);
-    }
-    
-    /* Convert to TSVector using standard function */
-    text* tsv_text = cstring_to_text(buf.data);
-    TSVector tsv = DatumGetTSVector(DirectFunctionCall1(to_tsvector, PointerGetDatum(tsv_text)));
-    
-    /* Cleanup */
-    ac_free_trie(root);
-    hash_destroy(seen);
-    for (int i = 0; i < unique_count; i++) pfree(keywords[i]);
-    pfree(keywords);
     pfree(text_str);
-    pfree(buf.data);
-    pfree(tsv_text);
-    pfree(matches);
-    
-    PG_RETURN_TSVECTOR(tsv);
+    PG_RETURN_BOOL(found);
+}
+
+/* Memory management */
+static void ac_automaton_destroy(ac_automaton *automaton)
+{
+    ac_free_trie(automaton->root);
+    pfree(automaton);
 }
