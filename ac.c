@@ -33,7 +33,7 @@ void ac_add_keyword(ac_state* root, const char* keyword, const int index)
 }
 
 
-void ac_build_failire_links(ac_state* root)
+void ac_build_failure_links(ac_state* root)
 {
 	int queue_capacity= 16;
 	int queue_size = 0;
@@ -252,22 +252,14 @@ void ac_free_trie(ac_state* current)
 
 ac_state* ac_create_trie(const char** keywords, int size)
 {
-	ac_state* root = ac_create_state();
+    ac_state* root = ac_create_state();
     root->is_root = true;
-	if (root == NULL)
-	{
-		return NULL;
-	}
-
-    for (int i = 0; i < size; i++)
+    for (int i = 0; i < size; i++) 
     {
-		int keywordLength = strlen(keywords[i]);
         ac_add_keyword(root, keywords[i], i);
     }
-
-    ac_build_failire_links(root);
-	ac_build_dictionary_links(root);
-
+    ac_build_failure_links(root);
+    ac_build_dictionary_links(root);
     return root;
 }
 
@@ -275,9 +267,11 @@ ac_state* ac_create_trie(const char** keywords, int size)
 bool ac_contains(ac_state *root, const char *token) 
 {
     ac_state *current = root;
-    for (int i = 0; token[i] != '\0'; i++) {
+    for (int i = 0; token[i] != '\0'; i++) 
+    {
         unsigned char c = (unsigned char)token[i];
-        if (!current->children[c]) {
+        if (!current->children[c]) 
+        {
             return false;
         }
         current = current->children[c];
@@ -300,106 +294,66 @@ void print_trie(ac_state* root)
 
 
 PG_FUNCTION_INFO_V1(ac_search);
-Datum ac_search(PG_FUNCTION_ARGS) {
-    text *text_arg = PG_GETARG_TEXT_PP(0);
-    ArrayType *keywords_array = PG_GETARG_ARRAYTYPE_P(1);
-    char *text_str = text_to_cstring(text_arg);
-    Datum *keyword_datums;
-    bool *keyword_nulls;
-    int keyword_count;
-    char **keywords;
-    ac_state *root;
-    StringInfoData buf;
-    HTAB *seen_keywords;
-    HASHCTL hash_ctl;
-
-    // Deconstruct keywords array
-    deconstruct_array(keywords_array, TEXTOID, -1, false, 'i', &keyword_datums, &keyword_nulls, &keyword_count);
-
-    // Define SeenEntry structure
-    typedef struct SeenEntry {
-        char *key;
-    } SeenEntry;
-
-    // Initialize hash table for deduplication
-    memset(&hash_ctl, 0, sizeof(hash_ctl));
+Datum ac_search(PG_FUNCTION_ARGS) 
+{
+    text* text_arg = PG_GETARG_TEXT_PP(0);
+    ArrayType* keywords_array = PG_GETARG_ARRAYTYPE_P(1);
+    char* text_str = text_to_cstring(text_arg);
+    
+    /* Process keywords */
+    Datum* keyword_datums;
+    bool* keyword_nulls;
+    int num_keywords;
+    deconstruct_array(keywords_array, TEXTOID, -1, false, 'i', &keyword_datums, &keyword_nulls, &num_keywords);
+    
+    char** keywords = palloc(num_keywords * sizeof(char*));
+    HASHCTL hash_ctl = {0};
     hash_ctl.keysize = sizeof(char*);
-    hash_ctl.entrysize = sizeof(SeenEntry);
-    hash_ctl.hash = string_hash_helper;  // Custom hash function
+    hash_ctl.entrysize = sizeof(char*);
+    hash_ctl.hash = string_hash;
     hash_ctl.match = (HashCompareFunc)strcmp;
-    hash_ctl.hcxt = CurrentMemoryContext;
-    seen_keywords = hash_create("Seen keywords", keyword_count, &hash_ctl, HASH_ELEM | HASH_FUNCTION | HASH_COMPARE | HASH_CONTEXT);
-
-    keywords = (char **)palloc(keyword_count * sizeof(char *));
+    HTAB* seen = hash_create("keywords", num_keywords, &hash_ctl, HASH_ELEM | HASH_FUNCTION | HASH_COMPARE);
+    
     int unique_count = 0;
-
-    // Normalize and deduplicate keywords
-    for (int i = 0; i < keyword_count; i++) {
-        if (keyword_nulls[i])
-            ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED), errmsg("NULL keyword not allowed")));
-
-        char *orig_keyword = TextDatumGetCString(keyword_datums[i]);
-        char *lower_keyword = (char *)palloc(strlen(orig_keyword) + 1);
-        for (int j = 0; orig_keyword[j]; j++) {
-            lower_keyword[j] = tolower(orig_keyword[j]);
-        }
-        lower_keyword[strlen(orig_keyword)] = '\0';
-
-        bool found;
-        SeenEntry *entry = (SeenEntry *)hash_search(seen_keywords, &lower_keyword, HASH_ENTER, &found);
-        if (!found) {
-            entry->key = lower_keyword;
-            keywords[unique_count++] = lower_keyword;
-        } else {
-            pfree(lower_keyword);
-        }
-    }
-
-    // Build trie with unique keywords
-    root = ac_create_trie((const char **)keywords, unique_count);
-
-    // Tokenize input text into lowercase tokens
-    initStringInfo(&buf);
-    StringInfoData token_buf;
-    initStringInfo(&token_buf);
-    int token_pos = 1;
-
-    for (int i = 0; text_str[i] != '\0'; i++) {
-        if (isalnum((unsigned char)text_str[i])) {
-            appendStringInfoChar(&token_buf, tolower(text_str[i]));
-        } else {
-            if (token_buf.len > 0) {
-                if (ac_contains(root, token_buf.data)) {
-                    appendStringInfo(&buf, "%s:%d ", token_buf.data, token_pos);
-                }
-                token_pos++;
-                resetStringInfo(&token_buf);
-            }
-        }
-    }
-
-    // Check last token
-    if (token_buf.len > 0) 
+    for (int i = 0; i < num_keywords; i++) 
     {
-        if (ac_contains(root, token_buf.data)) {
-            appendStringInfo(&buf, "%s:%d ", token_buf.data, token_pos);
-        }
+        if (keyword_nulls[i]) continue;
+        char* kw = TextDatumGetCString(keyword_datums[i]);
+        char* lower = palloc(strlen(kw) + 1);
+        for (int j = 0; kw[j]; j++) lower[j] = tolower(kw[j]);
+        lower[strlen(kw)] = '\0';
+        
+        bool found;
+        hash_search(seen, &lower, HASH_ENTER, &found);
+        if (!found) keywords[unique_count++] = lower;
+        else pfree(lower);
     }
-
-    // Generate TSVector
-    text *tsv_text = cstring_to_text(buf.data);
+    
+    ac_state* root = ac_create_trie((const char**)keywords, unique_count);
+    int* matches;
+    int num_matches = ac_match(root, text_str, &matches, false);
+    
+    /* Build TSVector string */
+    StringInfoData buf;
+    initStringInfo(&buf);
+    for (int i = 0; i < num_matches; i++)
+    {
+        appendStringInfo(&buf, "%s:%d ", keywords[matches[i]], i+1);
+    }
+    
+    /* Convert to TSVector using standard function */
+    text* tsv_text = cstring_to_text(buf.data);
     TSVector tsv = DatumGetTSVector(DirectFunctionCall1(to_tsvector, PointerGetDatum(tsv_text)));
-
-    // Cleanup
-    pfree(buf.data);
-    pfree(token_buf.data);
-    pfree(text_str);
-    hash_destroy(seen_keywords);
-    for (int i = 0; i < unique_count; i++) {
-        pfree(keywords[i]);
-    }
-    pfree(keywords);
+    
+    /* Cleanup */
     ac_free_trie(root);
-
+    hash_destroy(seen);
+    for (int i = 0; i < unique_count; i++) pfree(keywords[i]);
+    pfree(keywords);
+    pfree(text_str);
+    pfree(buf.data);
+    pfree(tsv_text);
+    pfree(matches);
+    
     PG_RETURN_TSVECTOR(tsv);
 }

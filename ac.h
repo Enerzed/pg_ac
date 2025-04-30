@@ -14,6 +14,7 @@
 #include "utils/array.h"
 #include "utils/lsyscache.h"
 #include "utils/builtins.h"
+#include "utils/hsearch.h"
 
 #include "tsearch/ts_cache.h"
 #include "tsearch/ts_locale.h"
@@ -41,6 +42,7 @@
 
 PG_MODULE_MAGIC;
 
+
 /* Aho Corasick trie node */
 typedef struct
 {
@@ -54,10 +56,15 @@ typedef struct
 } ac_state;
 
 
-typedef struct SeenEntry 
+/* Aho Corasick Automaton */
+typedef struct
 {
-    char *key; 
-} SeenEntry;
+    ac_state *root;
+    int32 refcount;
+} AC_Automaton;
+
+
+extern void _PG_init(void);
 
 
 /* Aho Corasick functions */

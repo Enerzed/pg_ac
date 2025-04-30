@@ -2,7 +2,12 @@
 \echo Use "CREATE EXTENSION pg_ac" to load this file. \quit
 
 
-CREATE OR REPLACE FUNCTION ac_search(text, text[])
-RETURNS tsvector
+CREATE FUNCTION ac_build(tsvector)
+RETURNS ac_automaton
+AS 'pg_ac', 'ac_build'
+LANGUAGE C IMMUTABLE;
+
+CREATE FUNCTION ac_search(ac_automaton, text)
+RETURNS jsonb
 AS 'pg_ac', 'ac_search'
 LANGUAGE C STRICT;
