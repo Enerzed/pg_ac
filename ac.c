@@ -122,7 +122,6 @@ void ac_build_dictionary_links(ac_state* root)
     ac_state** queue = (ac_state**)palloc(queue_capacity * sizeof(ac_state*));
     int front = 0, rear = 0;
     
-    // Initialize queue with root's children
     for (int i = 0; i < MAX_CHILDREN; i++) 
 	{
         if (root->children[i]) {
@@ -136,12 +135,11 @@ void ac_build_dictionary_links(ac_state* root)
         }
     }
     
-    // BFS traversal to set dictionary links
     while (front < rear) 
 	{
         ac_state* current = queue[front++];
         ac_state* fail = current->fail_link;
-        // Set dictionary link
+
         if (fail && fail->is_final)
 		{
             current->dictionary_link = current->fail_link;
@@ -155,7 +153,6 @@ void ac_build_dictionary_links(ac_state* root)
             current->dictionary_link = NULL;
         }
         
-        // Add children to queue
         for (int i = 0; i < MAX_CHILDREN; i++) 
 		{
             if (current->children[i]) 
@@ -185,7 +182,6 @@ int ac_match(ac_state* root, char* text, int** match_indices)
     
     for (int i = 0; i < text_length; i++) 
     {	
-        // Move to fail link
         while (current && !current->children[(unsigned char)text[i]])
         {
             current = current->fail_link;
@@ -198,7 +194,6 @@ int ac_match(ac_state* root, char* text, int** match_indices)
         {
             current = root;
         }
-        // Check for matches using dictionary links
         ac_state* temp = current;
         while (temp) 
         {
@@ -299,24 +294,4 @@ Datum ac_search(PG_FUNCTION_ARGS)
     result = evaluate_query(items, tsq, automaton);
 
     PG_RETURN_BOOL(result);
-}
-/* Memory management */
-static void ac_automaton_destroy(ac_automaton *automaton)
-{
-    ac_free_trie(automaton->root);
-    pfree(automaton);
-}
-
-
-/* TEST FUNCTION (DEPRICATED) */
-void print_trie(ac_state* root)
-{	
-	for (int i = 0; i < MAX_CHILDREN; i++)
-	{
-		if (root->children[i] != NULL)
-		{
-			printf("%c -> %p\n", i, root->children[i]);
-			print_trie(root->children[i]);
-		}
-	}
 }
