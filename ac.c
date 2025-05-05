@@ -124,7 +124,8 @@ void ac_build_dictionary_links(ac_state* root)
     
     for (int i = 0; i < MAX_CHILDREN; i++) 
 	{
-        if (root->children[i]) {
+        if (root->children[i]) 
+        {
             if (queue_size == queue_capacity) 
 			{
                 queue_capacity *= 2;
@@ -171,7 +172,7 @@ void ac_build_dictionary_links(ac_state* root)
     pfree(queue);
 }
 
-
+// Not really used anymore but could be usefull to count entries
 int ac_match(ac_state* root, char* text, int** match_indices)
 {
     ac_state* current = root;
@@ -245,8 +246,8 @@ Datum ac_build(PG_FUNCTION_ARGS)
     automaton->root = ac_create_state();
     for (int i = 0; i < tsv->size; i++)
     {
-        char *lexeme = pnstrdup(STRPTR(tsv) + entries[i].pos, entries[i].len);
-        ac_add_keyword(automaton->root, lexeme, i);
+        char *lexeme = pnstrdup(STRPTR(tsv) + entries[i].pos, entries[i].len);  // Get lexeme from TSQuery
+        ac_add_keyword(automaton->root, lexeme, i);                             // Add that lexeme to the trie
         pfree(lexeme);
     }
     
