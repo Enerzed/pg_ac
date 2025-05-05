@@ -246,7 +246,7 @@ Datum ac_build(PG_FUNCTION_ARGS)
     automaton->root = ac_create_state();
     for (int i = 0; i < tsv->size; i++)
     {
-        char *lexeme = pnstrdup(STRPTR(tsv) + entries[i].pos, entries[i].len);  // Get lexeme from TSQuery
+        char *lexeme = pnstrdup(STRPTR(tsv) + entries[i].pos, entries[i].len);  // Get lexeme from TSVector
         ac_add_keyword(automaton->root, lexeme, i);                             // Add that lexeme to the trie
         pfree(lexeme);
     }
@@ -261,8 +261,8 @@ bool evaluate_query(QueryItem *item, TSQuery *tsq, ac_automaton *automaton)
 {
     if (item->type == QI_VAL) 
     {
-        char *lexeme = pnstrdup(GETOPERAND(tsq) + item->qoperand.distance, item->qoperand.length);
-        bool found = ac_contains(automaton->root, lexeme);
+        char *lexeme = pnstrdup(GETOPERAND(tsq) + item->qoperand.distance, item->qoperand.length); // Get lexeme from TSQuery
+        bool found = ac_contains(automaton->root, lexeme);                                          // Look for that lexeme in the trie
         pfree(lexeme);
         return found;
     }
