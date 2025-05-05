@@ -69,16 +69,17 @@ extern void _PG_init(void);
 
 
 /* Aho Corasick functions */
-ac_state* ac_create_state();
-void ac_add_keyword(ac_state* root, const char* keyword, const int index);
-void ac_build_failure_links(ac_state* root);
-void ac_build_dictionary_links(ac_state* root);
-int ac_match(ac_state* root, char* text, int** match_indices, bool is_case_sensitive);
-void ac_free_trie(ac_state* trie);
-ac_state* ac_create_trie(const char** keywords, int size);
-static bool ac_contains(ac_state *root, const char *token);
+ac_state* ac_create_trie(const char** keywords, int size);					// Create Aho Corasick trie using keywords
+void ac_free_trie(ac_state* trie);											// Free trie
+ac_state* ac_create_state();												// Create Aho Corasick state
+void ac_add_keyword(ac_state* root, const char* keyword, const int index);	// Add keyword to the trie
+void ac_build_failure_links(ac_state* root);								// Build failure links for the trie
+void ac_build_dictionary_links(ac_state* root);								// Build dictionary links for the trie
+int ac_match(ac_state* root, char* text, int** match_indices);				// Match indices
+static bool ac_contains(ac_state *root, const char *token);					// Look if the word is in the trie
+static void ac_automaton_destroy(ac_automaton *automaton);					// Destroy Aho Corasick automaton
+
 void print_trie(ac_state *root);
-static void ac_automaton_destroy(ac_automaton *automaton);
 
 /* PostgreSQL-specific functions */
 Datum ac_search(PG_FUNCTION_ARGS);

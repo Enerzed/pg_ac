@@ -8,7 +8,7 @@ RETURNS ac_automaton
 AS 'pg_ac', 'ac_build'
 LANGUAGE C STRICT;
 
-CREATE FUNCTION ac_search(ac_automaton, text)
+CREATE FUNCTION ac_search(ac_automaton, tsquery)
 RETURNS boolean
 AS 'pg_ac', 'ac_search'
 LANGUAGE C STRICT;

@@ -6,6 +6,37 @@
 #include "ac.h"
 
 
+ac_state* ac_create_trie(const char** keywords, int size)
+{
+    ac_state* root = ac_create_state();
+    root->is_root = true;
+    for (int i = 0; i < size; i++) 
+    {
+        ac_add_keyword(root, keywords[i], i);
+    }
+    ac_build_failure_links(root);
+    ac_build_dictionary_links(root);
+    return root;
+}
+
+
+void ac_free_trie(ac_state* current)
+{
+	if (current == NULL)
+	{
+		return;
+	}
+	for (int i = 0; i < MAX_CHILDREN; i++)
+	{
+		if (current->children[i] != NULL)
+		{
+			ac_free_trie(current->children[i]);
+		}
+	}
+	pfree(current);
+}
+
+
 ac_state* ac_create_state()
 {
 	ac_state* state = (ac_state*)palloc0(sizeof(ac_state));
@@ -144,7 +175,7 @@ void ac_build_dictionary_links(ac_state* root)
 }
 
 
-int ac_match(ac_state* root, char* text, int** match_indices, bool is_case_sensitive)
+int ac_match(ac_state* root, char* text, int** match_indices)
 {
     ac_state* current = root;
     int text_length = strlen(text);
@@ -152,59 +183,20 @@ int ac_match(ac_state* root, char* text, int** match_indices, bool is_case_sensi
     int num_matches = 0;
     *match_indices = (int*)palloc(match_indices_capacity * sizeof(int));
     
-    char* processed_text = text;  // Default to original text
-    
-    // Create a lowercase copy if case insensitive
-    if (!is_case_sensitive) 
-    {
-        processed_text = (char*)palloc(text_length + 1);
-        for (int i = 0; i < text_length; i++) 
-        {
-            processed_text[i] = tolower(text[i]);
-        }
-        processed_text[text_length] = '\0';
-    }
-
     for (int i = 0; i < text_length; i++) 
     {	
-        if (is_case_sensitive)
+        // Move to fail link
+        while (current && !current->children[(unsigned char)text[i]])
         {
-            // Move to fail link
-            while (current && !current->children[(unsigned char)processed_text[i]])
-            {
-                current = current->fail_link;
-            }
-            if (current)
-            {
-                current = current->children[(unsigned char)processed_text[i]];
-            }
-            else 
-            {
-                current = root;
-            }
+            current = current->fail_link;
         }
-        else
+        if (current)
         {
-            // Move to fail link
-            while (current && !current->children[(unsigned char)tolower(processed_text[i])] && !current->children[(unsigned char)toupper(processed_text[i])])
-            {
-                current = current->fail_link;
-            }
-            if (current)
-            {
-                if (current->children[(unsigned char)toupper(processed_text[i])])
-                {
-                    current = current->children[(unsigned char)toupper(processed_text[i])];
-                }
-                else
-                {
-                    current = current->children[(unsigned char)tolower(processed_text[i])];
-                }
-            }
-            else 
-            {
-                current = root;
-            }
+            current = current->children[(unsigned char)text[i]];
+        }
+        else 
+        {
+            current = root;
         }
         // Check for matches using dictionary links
         ac_state* temp = current;
@@ -222,64 +214,99 @@ int ac_match(ac_state* root, char* text, int** match_indices, bool is_case_sensi
             temp = temp->dictionary_link;
         }
     }
-    
-    // Free the temporary lowercase string if we created one
-    if (!is_case_sensitive) 
-    {
-        pfree(processed_text);
-    }
-    
+
     return num_matches;
 }
 
 
-void ac_free_trie(ac_state* current)
+static bool ac_contains(ac_state *root, const char *text)
 {
-	if (current == NULL)
-	{
-		return;
-	}
-	for (int i = 0; i < MAX_CHILDREN; i++)
-	{
-		if (current->children[i] != NULL)
-		{
-			ac_free_trie(current->children[i]);
-		}
-	}
-	pfree(current);
-}
-
-
-ac_state* ac_create_trie(const char** keywords, int size)
-{
-    ac_state* root = ac_create_state();
-    root->is_root = true;
-    for (int i = 0; i < size; i++) 
-    {
-        ac_add_keyword(root, keywords[i], i);
-    }
-    ac_build_failure_links(root);
-    ac_build_dictionary_links(root);
-    return root;
-}
-
-
-/* Aho-Corasick implementation */
-static bool ac_contains(ac_state *root, const char *text) {
     ac_state *current = root;
-    for (int i = 0; text[i] != '\0'; i++) {
+    for (int i = 0; text[i] != '\0'; i++)
+    {
         unsigned char c = (unsigned char)text[i];
-        while (current && !current->children[c]) {
+        while (current && !current->children[c]) 
+        {
             current = current->fail_link;
         }
         current = current ? current->children[c] : root;
         
-        for (ac_state *temp = current; temp; temp = temp->dictionary_link) {
+        for (ac_state *temp = current; temp; temp = temp->dictionary_link) 
+        {
             if (temp->is_final) return true;
         }
     }
     return false;
 }
+
+
+PG_FUNCTION_INFO_V1(ac_build);
+Datum ac_build(PG_FUNCTION_ARGS) 
+{
+    TSVector tsv = PG_GETARG_TSVECTOR(0);
+    ac_automaton *automaton = palloc0(sizeof(ac_automaton));
+    WordEntry *entries = ARRPTR(tsv);
+    
+    automaton->root = ac_create_state();
+    for (int i = 0; i < tsv->size; i++)
+    {
+        char *lexeme = pnstrdup(STRPTR(tsv) + entries[i].pos, entries[i].len);
+        ac_add_keyword(automaton->root, lexeme, i);
+        pfree(lexeme);
+    }
+    
+    ac_build_failure_links(automaton->root);
+    ac_build_dictionary_links(automaton->root);
+    PG_RETURN_POINTER(automaton);
+}
+
+
+bool evaluate_query(QueryItem *item, TSQuery *tsq, ac_automaton *automaton) 
+{
+    if (item->type == QI_VAL) 
+    {
+        char *lexeme = pnstrdup(GETOPERAND(tsq) + item->qoperand.distance, item->qoperand.length);
+        bool found = ac_contains(automaton->root, lexeme);
+        pfree(lexeme);
+        return found;
+    }
+    else if (item->type == QI_OPR) 
+    {
+        switch (item->qoperator.oper) 
+        {
+            case OP_AND:
+                return evaluate_query(item + item->qoperator.left, tsq, automaton) && evaluate_query(item + 1, tsq, automaton);
+            case OP_OR:
+                return evaluate_query(item + item->qoperator.left, tsq, automaton) || evaluate_query(item + 1, tsq, automaton);
+            case OP_NOT:
+                return !evaluate_query(item + item->qoperator.left, tsq, automaton);
+            default:
+                elog(ERROR, "unrecognized operator: %d", item->qoperator.oper);
+        }
+    }
+    return false;
+}
+
+
+PG_FUNCTION_INFO_V1(ac_search);
+Datum ac_search(PG_FUNCTION_ARGS) 
+{
+    ac_automaton *automaton = (ac_automaton *)PG_GETARG_POINTER(0);
+    TSQuery tsq = PG_GETARG_TSQUERY(1);
+    QueryItem *items = GETQUERY(tsq);
+    bool result = false;
+
+    result = evaluate_query(items, tsq, automaton);
+
+    PG_RETURN_BOOL(result);
+}
+/* Memory management */
+static void ac_automaton_destroy(ac_automaton *automaton)
+{
+    ac_free_trie(automaton->root);
+    pfree(automaton);
+}
+
 
 /* TEST FUNCTION (DEPRICATED) */
 void print_trie(ac_state* root)
@@ -292,42 +319,4 @@ void print_trie(ac_state* root)
 			print_trie(root->children[i]);
 		}
 	}
-}
-
-
-PG_FUNCTION_INFO_V1(ac_build);
-Datum ac_build(PG_FUNCTION_ARGS) {
-    TSVector tsv = PG_GETARG_TSVECTOR(0);
-    ac_automaton *automaton = palloc0(sizeof(ac_automaton));
-    WordEntry *entries = ARRPTR(tsv);
-    
-    automaton->root = ac_create_state();
-    for (int i = 0; i < tsv->size; i++) {
-        char *lexeme = pnstrdup(STRPTR(tsv) + entries[i].pos, entries[i].len);
-        ac_add_keyword(automaton->root, lexeme, i);
-        pfree(lexeme);
-    }
-    
-    ac_build_failure_links(automaton->root);
-    ac_build_dictionary_links(automaton->root);
-    PG_RETURN_POINTER(automaton);
-}
-
-
-PG_FUNCTION_INFO_V1(ac_search);
-Datum ac_search(PG_FUNCTION_ARGS) {
-    ac_automaton *automaton = (ac_automaton *)PG_GETARG_POINTER(0);
-    text *input = PG_GETARG_TEXT_PP(1);
-    char *text_str = text_to_cstring(input);
-    bool found = ac_contains(automaton->root, text_str);
-    
-    pfree(text_str);
-    PG_RETURN_BOOL(found);
-}
-
-/* Memory management */
-static void ac_automaton_destroy(ac_automaton *automaton)
-{
-    ac_free_trie(automaton->root);
-    pfree(automaton);
 }
