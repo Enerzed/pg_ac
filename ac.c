@@ -257,11 +257,47 @@ Datum ac_build(PG_FUNCTION_ARGS)
 }
 
 
+PG_FUNCTION_INFO_V1(ac_build_array);
+Datum ac_build_array(PG_FUNCTION_ARGS)
+{
+    ArrayType *arr = PG_GETARG_ARRAYTYPE_P(0);
+    ac_automaton *automaton = (ac_automaton*)palloc0(sizeof(ac_automaton));
+    automaton->root = ac_create_state();
+
+    Oid elemtype = ARR_ELEMTYPE(arr);
+    int ndim = ARR_NDIM(arr);
+    int *dims = ARR_DIMS(arr);
+    int nitems = ArrayGetNItems(ndim, dims);
+
+    if (elemtype != TEXTOID)
+        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("ac_build_array requires a text array")));
+
+    Datum *elements;
+    bool *nulls;
+    int actual_nitems;
+    deconstruct_array(arr, TEXTOID, -1, false, 'i', &elements, &nulls, &actual_nitems);
+
+    for (int i = 0; i < actual_nitems; i++) 
+    {
+        if (nulls[i])
+            continue;
+
+        char *lexeme = TextDatumGetCString(elements[i]);
+        ac_add_keyword(automaton->root, lexeme, i);
+    }
+
+    ac_build_failure_links(automaton->root);
+    ac_build_dictionary_links(automaton->root);
+
+    PG_RETURN_POINTER(automaton);
+}
+
+
 bool evaluate_query(QueryItem *item, TSQuery *tsq, ac_automaton *automaton) 
 {
     if (item->type == QI_VAL) 
     {
-        char *lexeme = pnstrdup(GETOPERAND(tsq) + item->qoperand.distance, item->qoperand.length); // Get lexeme from TSQuery
+        char *lexeme = pnstrdup(GETOPERAND(tsq) + item->qoperand.distance, item->qoperand.length);  // Get lexeme from TSQuery
         bool found = ac_contains(automaton->root, lexeme);                                          // Look for that lexeme in the trie
         pfree(lexeme);
         return found;
@@ -295,4 +331,17 @@ Datum ac_search(PG_FUNCTION_ARGS)
     result = evaluate_query(items, tsq, automaton);
 
     PG_RETURN_BOOL(result);
+}
+
+
+PG_FUNCTION_INFO_V1(ac_search_text);
+Datum ac_search_text(PG_FUNCTION_ARGS) 
+{
+    ac_automaton *automaton = (ac_automaton *)PG_GETARG_POINTER(0);
+    text *input = PG_GETARG_TEXT_PP(1);
+    char *text_str = text_to_cstring(input);
+    bool found = ac_contains(automaton->root, text_str);
+    
+    pfree(text_str);
+    PG_RETURN_BOOL(found);
 }

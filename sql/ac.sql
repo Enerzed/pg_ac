@@ -5,5 +5,7 @@ SELECT ac_search(ac_build(to_tsvector('english', 'He likes dogs')), to_tsquery('
 SELECT ac_search(ac_build(to_tsvector('english', 'He likes snakes')), to_tsquery('like & (cat | dog)'));
 SELECT ac_search(ac_build(to_tsvector('english', 'He likes snakes')), to_tsquery('like & !(cat | dog)'));
 SELECT ac_search(ac_build(to_tsvector('english', 'He likes cats')), to_tsquery('like & !(cat | dog)'));
-
+SELECT ac_search(ac_build(to_tsvector('english', 'He liked cats')), to_tsquery('likely'));
+SELECT ac_search(ac_build(ARRAY['quick', 'brown', 'fox']), to_tsquery('quick & fox'));
+SELECT ac_search(ac_build(ARRAY['quick', 'brown', 'fox']), 'quick');
 DROP EXTENSION pg_ac;
