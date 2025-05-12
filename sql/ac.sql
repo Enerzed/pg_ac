@@ -6,6 +6,17 @@ SELECT ac_search(ac_build(to_tsvector('english', 'He likes snakes')), to_tsquery
 SELECT ac_search(ac_build(to_tsvector('english', 'He likes snakes')), to_tsquery('like & !(cat | dog)'));
 SELECT ac_search(ac_build(to_tsvector('english', 'He likes cats')), to_tsquery('like & !(cat | dog)'));
 SELECT ac_search(ac_build(to_tsvector('english', 'He liked cats')), to_tsquery('likely'));
-SELECT ac_search(ac_build(ARRAY['quick', 'brown', 'fox']), to_tsquery('quick & fox'));
-SELECT ac_search(ac_build(ARRAY['quick', 'brown', 'fox']), 'quick');
+-- Get raw ranking score
+SELECT ac_rank
+(
+    ac_build(to_tsvector('The quick brown fox jumps over the lazy dog')),
+    'quick'
+) AS relevance_score;
+
+-- Combined search with ranking
+SELECT * FROM ac_search_rank
+(
+    ac_build(to_tsvector('Example document serach terms')),
+    'search terms'
+);
 DROP EXTENSION pg_ac;

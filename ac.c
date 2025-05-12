@@ -172,123 +172,102 @@ void ac_build_dictionary_links(ac_state* root)
     pfree(queue);
 }
 
-// Not really used anymore but could be usefull to count entries
-int ac_match(ac_state* root, char* text, int** match_indices)
+
+ac_match_result ac_match(ac_state* root, char* text)
 {
     ac_state* current = root;
-    int text_length = strlen(text);
-    int match_indices_capacity = 16;
-    int num_matches = 0;
-    *match_indices = (int*)palloc(match_indices_capacity * sizeof(int));
+
+    ac_match_result result = {0};
+    int *matches = palloc(16 * sizeof(int));
+    int *counts = palloc(16 * sizeof(int));
+    int capacity = 16;
     
-    for (int i = 0; i < text_length; i++) 
+    for (int i = 0; i < text[i] != '\0'; i++) 
     {	
-        while (current && !current->children[(unsigned char)text[i]])
+        unsigned char c = (unsigned char)text[i];
+        while (current && !current->children[c])
         {
             current = current->fail_link;
         }
-        if (current)
-        {
-            current = current->children[(unsigned char)text[i]];
-        }
-        else 
-        {
-            current = root;
-        }
-        ac_state* temp = current;
-        while (temp) 
+        current = current ? current->children[c] : root;current = root;
+
+        for (ac_state *temp = current; temp; temp = temp->dictionary_link)
         {
             if (temp->is_final) 
             {
-                if (num_matches == match_indices_capacity) 
+                if (result.num_matches == capacity) 
                 {
-                    match_indices_capacity *= 2;
-                    *match_indices = (int*)repalloc(*match_indices, match_indices_capacity * sizeof(int));
+                    capacity *= 2;
+                    matches = repalloc(matches, capacity * sizeof(int));
+                    counts = repalloc(counts, capacity * sizeof(int));
                 }
-                (*match_indices)[num_matches++] = temp->index;
+                matches[result.num_matches] = temp->index;
+                counts[result.num_matches] = 1;
+                result.num_matches++;
             }
-            temp = temp->dictionary_link;
         }
     }
 
-    return num_matches;
+    result.matches = matches;
+    result.counts = counts;
+    return result;
 }
 
 
-static bool ac_contains(ac_state *root, const char *text)
+bool ac_contains(ac_state *root, const char *text, int *entries_count) 
 {
     ac_state *current = root;
+    *entries_count = 0;
     for (int i = 0; text[i] != '\0'; i++)
     {
         unsigned char c = (unsigned char)text[i];
-        while (current && !current->children[c]) 
+        while (current && !current->children[c])
         {
             current = current->fail_link;
         }
         current = current ? current->children[c] : root;
         
-        for (ac_state *temp = current; temp; temp = temp->dictionary_link) 
+        for (ac_state *temp = current; temp; temp = temp->dictionary_link)
         {
-            if (temp->is_final) return true;
+            if (temp->is_final)
+                (*entries_count)++;
         }
     }
-    return false;
+    return (*entries_count > 0);
+}
+
+
+int ac_count_entries(ac_state *root, const char *text)
+{
+    int count = 0;
+    ac_contains(root, text, &count);
+    return count;
 }
 
 
 PG_FUNCTION_INFO_V1(ac_build);
-Datum ac_build(PG_FUNCTION_ARGS) 
+Datum ac_build(PG_FUNCTION_ARGS)
 {
-    TSVector tsv = PG_GETARG_TSVECTOR(0);
-    ac_automaton *automaton = palloc0(sizeof(ac_automaton));
+    TSVector tsv = PG_GETARG_TSVECTOR_COPY(0);
+    ac_automaton *automaton = (ac_automaton*)palloc0(sizeof(ac_automaton));
     WordEntry *entries = ARRPTR(tsv);
     
     automaton->root = ac_create_state();
-    for (int i = 0; i < tsv->size; i++)
+    automaton->tsv = tsv;
+    automaton->lexemes = palloc0(tsv->size * sizeof(char*));
+    automaton->term_freq = palloc0(tsv->size * sizeof(int));
+    automaton->total_terms = 0;
+
+    for(int i=0; i<tsv->size; i++)
     {
-        char *lexeme = pnstrdup(STRPTR(tsv) + entries[i].pos, entries[i].len);  // Get lexeme from TSVector
-        ac_add_keyword(automaton->root, lexeme, i);                             // Add that lexeme to the trie
-        pfree(lexeme);
+        char *lexeme = pnstrdup(STRPTR(tsv) + entries[i].pos, entries[i].len);
+        automaton->lexemes[i] = lexeme;
+        automaton->term_freq[i] = POSDATALEN(tsv, &entries[i]);
+        automaton->total_terms += automaton->term_freq[i];
+        ac_add_keyword(automaton->root, lexeme, i);
     }
     
     ac_build_failure_links(automaton->root);
-    ac_build_dictionary_links(automaton->root);
-    PG_RETURN_POINTER(automaton);
-}
-
-
-PG_FUNCTION_INFO_V1(ac_build_array);
-Datum ac_build_array(PG_FUNCTION_ARGS)
-{
-    ArrayType *arr = PG_GETARG_ARRAYTYPE_P(0);
-    ac_automaton *automaton = (ac_automaton*)palloc0(sizeof(ac_automaton));
-    automaton->root = ac_create_state();
-
-    Oid elemtype = ARR_ELEMTYPE(arr);
-    int ndim = ARR_NDIM(arr);
-    int *dims = ARR_DIMS(arr);
-    int nitems = ArrayGetNItems(ndim, dims);
-
-    if (elemtype != TEXTOID)
-        ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE), errmsg("ac_build_array requires a text array")));
-
-    Datum *elements;
-    bool *nulls;
-    int actual_nitems;
-    deconstruct_array(arr, TEXTOID, -1, false, 'i', &elements, &nulls, &actual_nitems);
-
-    for (int i = 0; i < actual_nitems; i++) 
-    {
-        if (nulls[i])
-            continue;
-
-        char *lexeme = TextDatumGetCString(elements[i]);
-        ac_add_keyword(automaton->root, lexeme, i);
-    }
-
-    ac_build_failure_links(automaton->root);
-    ac_build_dictionary_links(automaton->root);
-
     PG_RETURN_POINTER(automaton);
 }
 
@@ -298,7 +277,8 @@ bool evaluate_query(QueryItem *item, TSQuery *tsq, ac_automaton *automaton)
     if (item->type == QI_VAL) 
     {
         char *lexeme = pnstrdup(GETOPERAND(tsq) + item->qoperand.distance, item->qoperand.length);  // Get lexeme from TSQuery
-        bool found = ac_contains(automaton->root, lexeme);                                          // Look for that lexeme in the trie
+        int entries = 0;
+        bool found = ac_contains(automaton->root, lexeme, &entries);                                // Look for that lexeme in the trie
         pfree(lexeme);
         return found;
     }
@@ -323,7 +303,7 @@ bool evaluate_query(QueryItem *item, TSQuery *tsq, ac_automaton *automaton)
 PG_FUNCTION_INFO_V1(ac_search);
 Datum ac_search(PG_FUNCTION_ARGS) 
 {
-    ac_automaton *automaton = (ac_automaton *)PG_GETARG_POINTER(0);
+    ac_automaton *automaton = (ac_automaton*)PG_GETARG_POINTER(0);
     TSQuery tsq = PG_GETARG_TSQUERY(1);
     QueryItem *items = GETQUERY(tsq);
     bool result = false;
@@ -337,11 +317,54 @@ Datum ac_search(PG_FUNCTION_ARGS)
 PG_FUNCTION_INFO_V1(ac_search_text);
 Datum ac_search_text(PG_FUNCTION_ARGS) 
 {
-    ac_automaton *automaton = (ac_automaton *)PG_GETARG_POINTER(0);
+    ac_automaton *automaton = (ac_automaton*)PG_GETARG_POINTER(0);
     text *input = PG_GETARG_TEXT_PP(1);
     char *text_str = text_to_cstring(input);
-    bool found = ac_contains(automaton->root, text_str);
+    int entries_count = 0;
+    bool found = ac_contains(automaton->root, text_str, &entries_count);
     
     pfree(text_str);
     PG_RETURN_BOOL(found);
+}
+
+
+PG_FUNCTION_INFO_V1(ac_rank);
+Datum ac_rank(PG_FUNCTION_ARGS)
+{
+    ac_automaton *automaton = (ac_automaton*)PG_GETARG_POINTER(0);
+    text *input = PG_GETARG_TEXT_PP(1);
+    char *text_str = text_to_cstring(input);
+    
+    ac_match_result result = ac_match(automaton->root, text_str);
+    float4 score = 0.0;
+
+    for(int i = 0; i < result.num_matches; i++) 
+    {
+        int idx = result.matches[i];
+        float tf = (float)result.counts[i] / result.num_matches;
+        float idf = log((float)automaton->total_terms / automaton->term_freq[idx]);
+        score += tf * idf;
+    }
+
+    pfree(result.matches);
+    pfree(result.counts);
+    pfree(text_str);
+    
+    PG_RETURN_FLOAT4(score);
+}
+
+
+PG_FUNCTION_INFO_V1(ac_automaton_in);
+Datum ac_automaton_in(PG_FUNCTION_ARGS)
+{
+    ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("ac_automaton_in not implemented")));
+    PG_RETURN_POINTER(NULL);
+}
+
+
+PG_FUNCTION_INFO_V1(ac_automaton_out);
+Datum ac_automaton_out(PG_FUNCTION_ARGS)
+{
+    ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("ac_automaton_out not implemented")));
+    PG_RETURN_CSTRING("\0");
 }

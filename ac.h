@@ -39,7 +39,8 @@
 
 
 #define MAX_CHILDREN 256
-
+#define MAX_LEXEME_SIZE 256
+#define MAX_NUM_MATCHES 256
 
 PG_MODULE_MAGIC;
 
@@ -62,7 +63,20 @@ typedef struct
 typedef struct
 {
     ac_state *root;
+	TSVector tsv;
+	char **lexemes;
+	int *term_freq;
+	int num_lexemes;
+	int total_terms;
 } ac_automaton;
+
+
+typedef struct 
+{
+    int *matches;
+    int *counts;
+    int num_matches;
+} ac_match_result;
 
 
 extern void _PG_init(void);
@@ -75,9 +89,12 @@ ac_state* ac_create_state();													// Create Aho Corasick state
 void ac_add_keyword(ac_state* root, const char* keyword, const int index);		// Add keyword to the trie
 void ac_build_failure_links(ac_state* root);									// Build failure links for the trie
 void ac_build_dictionary_links(ac_state* root);									// Build dictionary links for the trie
-int ac_match(ac_state* root, char* text, int** match_indices);					// Match indices
-static bool ac_contains(ac_state *root, const char *token);						// Look if the word is in the trie
+ac_match_result ac_match(ac_state* root, char* text);							// Match indices
+bool ac_contains(ac_state *root, const char *token, int *entries_count);		// Look if the word is in the trie
 bool evaluate_query(QueryItem *item, TSQuery *tsq, ac_automaton *automaton);	// Evaluate query for the result
 
 /* PostgreSQL-specific functions */
+Datum ac_automaton_in(PG_FUNCTION_ARGS);
+Datum ac_automaton_out(PG_FUNCTION_ARGS);
 Datum ac_search(PG_FUNCTION_ARGS);
+Datum ac_search_text(PG_FUNCTION_ARGS);
