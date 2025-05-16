@@ -1,56 +1,113 @@
+--TEST CASES--
 CREATE EXTENSION pg_ac;
-SELECT ac_search(ac_build(to_tsvector('english', 'He likes dogs and cats')), to_tsquery('like & cat'));
+SELECT ac_search
+(
+    ac_build(to_tsvector('english', 'He likes dogs and cats')),
+    to_tsquery('like & cat')
+);
  ac_search 
 -----------
  t
 (1 row)
 
-SELECT ac_search(ac_build(to_tsvector('english', 'He likes dogs')), to_tsquery('like & cat'));
+SELECT ac_search
+(
+    ac_build(to_tsvector('english', 'He likes dogs')),
+    to_tsquery('like & cat')
+);
  ac_search 
 -----------
  f
 (1 row)
 
-SELECT ac_search(ac_build(to_tsvector('english', 'He likes dogs')), to_tsquery('like & (cat | dog)'));
+SELECT ac_search
+(
+    ac_build(to_tsvector('english', 'He likes dogs')),
+    to_tsquery('like & (cat | dog)')
+);
  ac_search 
 -----------
  t
 (1 row)
 
-SELECT ac_search(ac_build(to_tsvector('english', 'He likes snakes')), to_tsquery('like & (cat | dog)'));
+SELECT ac_search
+(
+    ac_build(to_tsvector('english', 'He likes snakes')),
+    to_tsquery('like & (cat | dog)')
+);
  ac_search 
 -----------
  f
 (1 row)
 
-SELECT ac_search(ac_build(to_tsvector('english', 'He likes snakes')), to_tsquery('like & !(cat | dog)'));
- ac_search 
------------
- t
-(1 row)
-
-SELECT ac_search(ac_build(to_tsvector('english', 'He likes cats')), to_tsquery('like & !(cat | dog)'));
+SELECT ac_search
+(
+    ac_build(to_tsvector('english', 'He likes cats')),
+    to_tsquery('like & !(cat | dog)')
+);
  ac_search 
 -----------
  f
 (1 row)
 
-SELECT ac_search(ac_build(to_tsvector('english', 'He liked cats')), to_tsquery('likely'));
+SELECT ac_search
+(
+    ac_build(to_tsvector('english', 'He likes cats')),
+    to_tsquery('like & !(cat | dog)')
+);
+ ac_search 
+-----------
+ f
+(1 row)
+
+SELECT ac_search
+(
+    ac_build(to_tsvector('english', 'He likes cats')),
+    to_tsquery('likely')
+);
  ac_search 
 -----------
  t
 (1 row)
 
-SELECT ac_search(ac_build(ARRAY['quick', 'brown', 'fox']), to_tsquery('quick & fox'));
- ac_search 
------------
- t
+SELECT ac_rank_simple
+(
+    ac_build(to_tsvector('The quick brown fox jumps over the lazy dog')),
+    'jump dog fox'
+);
+ ac_rank_simple 
+----------------
+            0.5
 (1 row)
 
-SELECT ac_search(ac_build(ARRAY['quick', 'brown', 'fox']), 'quick');
- ac_search 
------------
- t
+SELECT ac_rank_simple
+(
+    ac_build(to_tsvector('The quick brown fox jumps over the lazy dog')),
+    'fox'
+);
+ ac_rank_simple 
+----------------
+     0.16666667
+(1 row)
+
+SELECT ac_rank_simple
+(
+    ac_build(to_tsvector('The quick brown fox jumps over the lazy dog')),
+    'pink horse'
+);
+ ac_rank_simple 
+----------------
+              0
+(1 row)
+
+SELECT * FROM ac_search_rank_simple
+(
+    ac_build(to_tsvector('The quick brown fox jumps over the lazy dog')),
+    'jump dog'
+);
+ found |    rank    
+-------+------------
+ t     | 0.33333334
 (1 row)
 
 DROP EXTENSION pg_ac;

@@ -38,14 +38,13 @@ RETURNS boolean
 AS 'pg_ac', 'ac_search_text'
 LANGUAGE C STRICT;
 
-CREATE FUNCTION ac_rank(ac_automaton, text) 
-RETURNS float4
-AS 'pg_ac', 'ac_rank'
+CREATE FUNCTION ac_rank_simple(ac_automaton, text) 
+RETURNS real
+AS 'pg_ac', 'ac_rank_simple'
 LANGUAGE C STRICT;
 
--- Combined search and rank
-CREATE FUNCTION ac_search_rank(ac_automaton, text) 
+CREATE FUNCTION ac_search_rank_simple(ac_automaton, text) 
 RETURNS TABLE (found bool, rank float4)
 AS $$
-    SELECT ac_search($1, $2), ac_rank($1, $2)
+    SELECT ac_search($1, $2), ac_rank_simple($1, $2)
 $$ LANGUAGE SQL;

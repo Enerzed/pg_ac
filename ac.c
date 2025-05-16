@@ -5,7 +5,8 @@
 
 #include "ac.h"
 
-
+// NOT USED ANYMORE. DEPRICATED
+/*
 ac_state* ac_create_trie(const char** keywords, int size)
 {
     ac_state* root = ac_create_state();
@@ -18,8 +19,10 @@ ac_state* ac_create_trie(const char** keywords, int size)
     ac_build_dictionary_links(root);
     return root;
 }
+*/
 
-
+// NOT USED ANYMORE. DEPRICATED
+/*
 void ac_free_trie(ac_state* current)
 {
 	if (current == NULL)
@@ -35,12 +38,15 @@ void ac_free_trie(ac_state* current)
 	}
 	pfree(current);
 }
+*/
 
 
+// Creates a new Aho Corasick state
 ac_state* ac_create_state()
 {
-	ac_state* state = (ac_state*)palloc0(sizeof(ac_state));
-	state->is_root = false;
+    // Allocate and initialize a new state
+	ac_state* state = (ac_state*)palloc0(sizeof(ac_state)); 
+	state->is_root = false;                                         
 	state->is_final = false;
 	state->index = -1;
 	state->fail_link = NULL;
@@ -48,6 +54,7 @@ ac_state* ac_create_state()
 }
 
 
+// Adds a keyword to the trie
 void ac_add_keyword(ac_state* root, const char* keyword, const int index)
 {
 	ac_state* current = root;
@@ -64,6 +71,7 @@ void ac_add_keyword(ac_state* root, const char* keyword, const int index)
 }
 
 
+// Builds failure links
 void ac_build_failure_links(ac_state* root)
 {
 	int queue_capacity= 16;
@@ -115,6 +123,7 @@ void ac_build_failure_links(ac_state* root)
 }
 
 
+// Builds dictionary links
 void ac_build_dictionary_links(ac_state* root)
 {
     int queue_capacity = 16;
@@ -173,6 +182,7 @@ void ac_build_dictionary_links(ac_state* root)
 }
 
 
+// Matches a text against the trie
 ac_match_result ac_match(ac_state* root, char* text)
 {
     ac_state* current = root;
@@ -189,7 +199,7 @@ ac_match_result ac_match(ac_state* root, char* text)
         {
             current = current->fail_link;
         }
-        current = current ? current->children[c] : root;current = root;
+        current = current ? current->children[c] : root;
 
         for (ac_state *temp = current; temp; temp = temp->dictionary_link)
         {
@@ -237,44 +247,33 @@ bool ac_contains(ac_state *root, const char *text, int *entries_count)
 }
 
 
-int ac_count_entries(ac_state *root, const char *text)
-{
-    int count = 0;
-    ac_contains(root, text, &count);
-    return count;
-}
-
-
 PG_FUNCTION_INFO_V1(ac_build);
 Datum ac_build(PG_FUNCTION_ARGS)
 {
-    TSVector tsv = PG_GETARG_TSVECTOR_COPY(0);
     ac_automaton *automaton = (ac_automaton*)palloc0(sizeof(ac_automaton));
+    TSVector tsv = PG_GETARG_TSVECTOR_COPY(0);
     WordEntry *entries = ARRPTR(tsv);
     
     automaton->root = ac_create_state();
     automaton->tsv = tsv;
-    automaton->lexemes = palloc0(tsv->size * sizeof(char*));
-    automaton->term_freq = palloc0(tsv->size * sizeof(int));
-    automaton->total_terms = 0;
 
-    for(int i=0; i<tsv->size; i++)
+    for(int i = 0; i < tsv->size; i++)
     {
         char *lexeme = pnstrdup(STRPTR(tsv) + entries[i].pos, entries[i].len);
-        automaton->lexemes[i] = lexeme;
-        automaton->term_freq[i] = POSDATALEN(tsv, &entries[i]);
-        automaton->total_terms += automaton->term_freq[i];
         ac_add_keyword(automaton->root, lexeme, i);
     }
     
     ac_build_failure_links(automaton->root);
+    ac_build_dictionary_links(automaton->root);
+
     PG_RETURN_POINTER(automaton);
 }
 
 
 bool evaluate_query(QueryItem *item, TSQuery *tsq, ac_automaton *automaton) 
 {
-    if (item->type == QI_VAL) 
+    // If the item is a value 
+    if (item->type == QI_VAL)            
     {
         char *lexeme = pnstrdup(GETOPERAND(tsq) + item->qoperand.distance, item->qoperand.length);  // Get lexeme from TSQuery
         int entries = 0;
@@ -282,7 +281,8 @@ bool evaluate_query(QueryItem *item, TSQuery *tsq, ac_automaton *automaton)
         pfree(lexeme);
         return found;
     }
-    else if (item->type == QI_OPR) 
+    // If the item is an operator
+    else if (item->type == QI_OPR)   
     {
         switch (item->qoperator.oper) 
         {
@@ -328,23 +328,15 @@ Datum ac_search_text(PG_FUNCTION_ARGS)
 }
 
 
-PG_FUNCTION_INFO_V1(ac_rank);
-Datum ac_rank(PG_FUNCTION_ARGS)
+PG_FUNCTION_INFO_V1(ac_rank_simple);
+Datum ac_rank_simple(PG_FUNCTION_ARGS)
 {
     ac_automaton *automaton = (ac_automaton*)PG_GETARG_POINTER(0);
     text *input = PG_GETARG_TEXT_PP(1);
     char *text_str = text_to_cstring(input);
     
     ac_match_result result = ac_match(automaton->root, text_str);
-    float4 score = 0.0;
-
-    for(int i = 0; i < result.num_matches; i++) 
-    {
-        int idx = result.matches[i];
-        float tf = (float)result.counts[i] / result.num_matches;
-        float idf = log((float)automaton->total_terms / automaton->term_freq[idx]);
-        score += tf * idf;
-    }
+    float4 score = (float)result.num_matches / automaton->tsv->size;
 
     pfree(result.matches);
     pfree(result.counts);

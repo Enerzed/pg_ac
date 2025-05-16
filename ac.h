@@ -28,6 +28,7 @@
 #include "nodes/parsenodes.h"
 #include "access/tupdesc.h"
 #include "common/hashfn.h"
+#include "libpq/pqformat.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -48,34 +49,32 @@ PG_MODULE_MAGIC;
 /* Aho Corasick trie node */
 typedef struct
 {
-	struct ac_state* children[MAX_CHILDREN];
-	struct ac_state* fail_link;
-	struct ac_state* dictionary_link;
-	char *lexeme;
-	int index;
-	bool is_root;
-	bool is_final;
+	struct ac_state* children[MAX_CHILDREN];									// Children of the node
+	struct ac_state* fail_link;													// Failure link traverses to the link that has the longest common prefix
+	struct ac_state* dictionary_link;											// Dictionary link traverses to the link that is also need to be considered
+	char *lexeme;																// Lexeme stored
+	int index;																	// Index of the lexeme
+	bool is_root;																// Is root
+	bool is_final;																// Is final
 
 } ac_state;
 
 
 /* Aho Corasick Automaton */
-typedef struct
+typedef struct 
 {
-    ac_state *root;
-	TSVector tsv;
-	char **lexemes;
-	int *term_freq;
-	int num_lexemes;
-	int total_terms;
+    TSVector tsv;           													// Original TSVector
+    ac_state *root;         													// Trie structure (transient, not stored)
 } ac_automaton;
 
 
 typedef struct 
 {
-    int *matches;
-    int *counts;
-    int num_matches;
+	// Useful for ranking only
+    int *matches;																// Match indices in the text
+    int *counts;																// Number of matches (stored as 1 for each match index)
+    int num_matches;															// Total number of matches
+	int num_lexemes;															// Total number of lexemes
 } ac_match_result;
 
 
@@ -83,8 +82,8 @@ extern void _PG_init(void);
 
 
 /* Aho Corasick functions */
-ac_state* ac_create_trie(const char** keywords, int size);						// Create Aho Corasick trie using keywords
-void ac_free_trie(ac_state* trie);												// Free trie
+//static ac_automaton* ac_create_trie(TSVector tsv);								// Create Aho Corasick trie using keywords
+//void ac_free_trie(ac_state* trie);												// Free trie
 ac_state* ac_create_state();													// Create Aho Corasick state
 void ac_add_keyword(ac_state* root, const char* keyword, const int index);		// Add keyword to the trie
 void ac_build_failure_links(ac_state* root);									// Build failure links for the trie
@@ -94,7 +93,9 @@ bool ac_contains(ac_state *root, const char *token, int *entries_count);		// Loo
 bool evaluate_query(QueryItem *item, TSQuery *tsq, ac_automaton *automaton);	// Evaluate query for the result
 
 /* PostgreSQL-specific functions */
-Datum ac_automaton_in(PG_FUNCTION_ARGS);
-Datum ac_automaton_out(PG_FUNCTION_ARGS);
-Datum ac_search(PG_FUNCTION_ARGS);
-Datum ac_search_text(PG_FUNCTION_ARGS);
+Datum ac_build(PG_FUNCTION_ARGS);												// Build Aho Corasick automaton
+Datum ac_search(PG_FUNCTION_ARGS);												// Search in Aho Corasick automaton using TSQuery
+Datum ac_search_text(PG_FUNCTION_ARGS);											// Search in Aho Corasick automaton using text
+Datum ac_rank_simple(PG_FUNCTION_ARGS);											// Rank search result
+Datum ac_automaton_in(PG_FUNCTION_ARGS);										// Parse Aho Corasick automaton
+Datum ac_automaton_out(PG_FUNCTION_ARGS);										// Serialize Aho Corasick automaton
