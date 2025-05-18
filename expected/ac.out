@@ -1,112 +1,128 @@
 --TEST CASES--
 CREATE EXTENSION pg_ac;
-SELECT ac_build(to_tsvector('english', 'He likes dogs and cats'));
+SELECT ac_build(to_tsvector('english', 'Dogs and cats are the best pets'));
  ac_build 
 ----------
         1
 (1 row)
 
-SELECT ac_search(1, to_tsquery('like & cat'));
+SELECT ac_build(to_tsvector('english', 'Dogs are the best pets'));
+ ac_build 
+----------
+        2
+(1 row)
+
+SELECT ac_build(to_tsvector('english', 'Cats are the best pets'));
+ ac_build 
+----------
+        3
+(1 row)
+
+SELECT ac_build(to_tsvector('english', 'Snakes are the best animals'));
+ ac_build 
+----------
+        4
+(1 row)
+
+SELECT ac_build(to_tsvector('english', 'Quick brown fox jumps over the lazy dog'));
+ ac_build 
+----------
+        5
+(1 row)
+
+/*Test first automaton*/
+SELECT ac_search(1, to_tsquery('english', 'dog & cat'));                        -- Should be true
  ac_search 
 -----------
  t
 (1 row)
 
-SELECT ac_search
-(
-    ac_build(to_tsvector('english', 'He likes dogs and cats')),
-    to_tsquery('like & cat')
-);
+SELECT ac_search(1, to_tsquery('english', '!dog & !cat'));                      -- Should be false
+ ac_search 
+-----------
+ f
+(1 row)
+
+SELECT ac_search(1, to_tsquery('english', 'dog | snake'));                      -- Should be true
  ac_search 
 -----------
  t
 (1 row)
 
-SELECT ac_search
-(
-    ac_build(to_tsvector('english', 'He likes dogs')),
-    to_tsquery('like & cat')
-);
- ac_search 
------------
- f
-(1 row)
-
-SELECT ac_search
-(
-    ac_build(to_tsvector('english', 'He likes dogs')),
-    to_tsquery('like & (cat | dog)')
-);
+/*Test second automaton*/
+SELECT ac_search(2, to_tsquery('english', 'pet & (cat | dog)'));                -- Should be true
  ac_search 
 -----------
  t
 (1 row)
 
-SELECT ac_search
-(
-    ac_build(to_tsvector('english', 'He likes snakes')),
-    to_tsquery('like & (cat | dog)')
-);
+SELECT ac_search(2, to_tsquery('english', 'pet & !(cat | dog)'));               -- Should be false
  ac_search 
 -----------
  f
 (1 row)
 
-SELECT ac_search
-(
-    ac_build(to_tsvector('english', 'He likes cats')),
-    to_tsquery('like & !(cat | dog)')
-);
+SELECT ac_search(2, to_tsquery('english', 'likely'));                           -- Should be false
  ac_search 
 -----------
  f
 (1 row)
 
-SELECT ac_search
-(
-    ac_build(to_tsvector('english', 'He likes cats')),
-    to_tsquery('like & !(cat | dog)')
-);
- ac_search 
------------
- f
-(1 row)
-
-SELECT ac_search
-(
-    ac_build(to_tsvector('english', 'He likes cats')),
-    to_tsquery('likely')
-);
+/*Test third automaton*/
+SELECT ac_search(3, to_tsquery('english', 'pet & (dog | cat)'));                -- Should be true
  ac_search 
 -----------
  t
 (1 row)
 
-SELECT ac_rank_simple
-(
-    ac_build(to_tsvector('The quick brown fox jumps over the lazy dog')),
-    'jump dog fox'
-);
+SELECT ac_search(3, to_tsquery('english', 'pet & !(dog | cat)'));               -- Should be false
+ ac_search 
+-----------
+ f
+(1 row)
+
+SELECT ac_search(3, to_tsquery('english', ''));                                 -- Should be false
+NOTICE:  text-search query doesn't contain lexemes: ""
+ ac_search 
+-----------
+ f
+(1 row)
+
+/*Test fourth automaton*/
+SELECT ac_search(4, to_tsquery('english', 'are'));                              -- Should be false
+NOTICE:  text-search query contains only stop words or doesn't contain lexemes, ignored
+ ac_search 
+-----------
+ f
+(1 row)
+
+SELECT ac_search(4, to_tsquery('english', 'pet & (dog | cat)'));                -- Should be false
+ ac_search 
+-----------
+ f
+(1 row)
+
+SELECT ac_search(4, to_tsquery('english', 'the'));                              -- Should be false
+NOTICE:  text-search query contains only stop words or doesn't contain lexemes, ignored
+ ac_search 
+-----------
+ f
+(1 row)
+
+/*Test fifth automaton for ranked search*/
+SELECT ac_rank_simple(5, 'jump dog fox');                                       -- Should be 0.5
  ac_rank_simple 
 ----------------
             0.5
 (1 row)
 
-SELECT ac_rank_simple
-(
-    ac_build(to_tsvector('The quick brown fox jumps over the lazy dog')),
-    'fox'
-);
+SELECT ac_rank_simple(5,'fox');                                                 -- Should be 0.1(6)
  ac_rank_simple 
 ----------------
      0.16666667
 (1 row)
 
-SELECT ac_rank_simple
-(
-    ac_build(to_tsvector('The quick brown fox jumps over the lazy dog')),
-    'pink horse'
-);
+SELECT ac_rank_simple(5,'pink horse');                                          -- Should be 0
  ac_rank_simple 
 ----------------
               0
