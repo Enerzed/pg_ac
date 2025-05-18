@@ -90,18 +90,25 @@ static HTAB *automaton_storage = NULL;
 static int next_automaton_id = 1;
 
 
+/* Init and fini */
+void _PG_init(void);
+void _PG_fini(void);
+
+
+/* Memory management */
+static void init_automaton_storage();
+static void cleanup_automaton();
+void ac_free_trie(ac_state* current);
+
+
 /* Aho Corasick functions */
-//static ac_automaton* ac_create_trie(TSVector tsv);								// Create Aho Corasick trie using keywords
-void ac_free_trie(ac_state* trie);												// Free trie
 ac_state* ac_create_state();													// Create Aho Corasick state
 void ac_add_keyword(ac_state* root, const char* keyword, const int index);		// Add keyword to the trie
 void ac_build_failure_links(ac_state* root);									// Build failure links for the trie
 void ac_build_dictionary_links(ac_state* root);									// Build dictionary links for the trie
 ac_match_result ac_match(ac_state* root, char* text);							// Match indices
-bool ac_contains(ac_state *root, const char *token, int *entries_count);		// Look if the word is in the trie
+bool ac_contains(ac_state *root, const char *text);								// Look if the word is in the trie
 bool evaluate_query(QueryItem *item, TSQuery *tsq, ac_automaton *automaton);	// Evaluate query for the result
-static void init_automaton_storage();
-static void cleanup_automaton() ;
 
 
 /* PostgreSQL-specific functions */
@@ -109,5 +116,8 @@ Datum ac_build(PG_FUNCTION_ARGS);												// Build Aho Corasick automaton
 Datum ac_search(PG_FUNCTION_ARGS);												// Search in Aho Corasick automaton using TSQuery
 Datum ac_search_text(PG_FUNCTION_ARGS);											// Search in Aho Corasick automaton using text
 Datum ac_rank_simple(PG_FUNCTION_ARGS);											// Rank search result
-Datum ac_automaton_in(PG_FUNCTION_ARGS);										// Parse Aho Corasick automaton
-Datum ac_automaton_out(PG_FUNCTION_ARGS);										// Serialize Aho Corasick automaton
+/* PostgreSQL initialize functions */
+PG_FUNCTION_INFO_V1(ac_build);
+PG_FUNCTION_INFO_V1(ac_search);
+PG_FUNCTION_INFO_V1(ac_search_text);
+PG_FUNCTION_INFO_V1(ac_rank_simple);
