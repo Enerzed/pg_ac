@@ -5,24 +5,51 @@
 
 #include "ac.h"
 
-// NOT USED ANYMORE. DEPRICATED
-/*
-ac_state* ac_create_trie(const char** keywords, int size)
-{
-    ac_state* root = ac_create_state();
-    root->is_root = true;
-    for (int i = 0; i < size; i++) 
-    {
-        ac_add_keyword(root, keywords[i], i);
-    }
-    ac_build_failure_links(root);
-    ac_build_dictionary_links(root);
-    return root;
-}
-*/
 
-// NOT USED ANYMORE. DEPRICATED
-/*
+// Init automaton storage
+void _PG_init(void) 
+{
+    HASHCTL ctl;
+    memset(&ctl, 0, sizeof(ctl));
+    ctl.keysize = sizeof(int32);
+    ctl.entrysize = sizeof(ac_automaton_entry);
+    ctl.hcxt = TopMemoryContext; // Use TopMemoryContext for global storage
+    automaton_storage = hash_create("automaton storage", 100, &ctl, HASH_ELEM | HASH_CONTEXT);
+}
+
+
+// Cleanup
+void _PG_fini(void)
+{
+    cleanup_automaton();
+    hash_destroy(automaton_storage);
+}
+
+
+static void init_automaton_storage()
+{
+    HASHCTL ctl;
+    memset(&ctl, 0, sizeof(ctl));
+    ctl.keysize = sizeof(int32);
+    ctl.entrysize = sizeof(int32) + sizeof(ac_automaton*);
+    automaton_storage = hash_create("automaton_storage", 100, &ctl, HASH_ELEM | HASH_ELEM);
+}
+
+
+static void cleanup_automaton() 
+{
+    HASH_SEQ_STATUS status;
+    hash_seq_init(&status, automaton_storage);
+
+    ac_automaton *entry;
+    while((entry = (ac_automaton*)hash_seq_search(&status)) != NULL)
+    {
+        ac_free_trie(entry->root);
+        pfree(entry);
+    }
+}
+
+
 void ac_free_trie(ac_state* current)
 {
 	if (current == NULL)
@@ -38,7 +65,7 @@ void ac_free_trie(ac_state* current)
 	}
 	pfree(current);
 }
-*/
+
 
 
 // Creates a new Aho Corasick state
@@ -46,7 +73,6 @@ ac_state* ac_create_state()
 {
     // Allocate and initialize a new state
 	ac_state* state = (ac_state*)palloc0(sizeof(ac_state)); 
-	state->is_root = false;                                         
 	state->is_final = false;
 	state->index = -1;
 	state->fail_link = NULL;
@@ -248,25 +274,32 @@ bool ac_contains(ac_state *root, const char *text, int *entries_count)
 
 
 PG_FUNCTION_INFO_V1(ac_build);
-Datum ac_build(PG_FUNCTION_ARGS)
+Datum ac_build(PG_FUNCTION_ARGS) 
 {
-    ac_automaton *automaton = (ac_automaton*)palloc0(sizeof(ac_automaton));
-    TSVector tsv = PG_GETARG_TSVECTOR_COPY(0);
-    WordEntry *entries = ARRPTR(tsv);
+    MemoryContext oldctx = MemoryContextSwitchTo(TopMemoryContext);
     
-    automaton->root = ac_create_state();
+    TSVector tsv = PG_GETARG_TSVECTOR_COPY(0);
+    
+    ac_automaton *automaton = palloc0(sizeof(ac_automaton));
     automaton->tsv = tsv;
-
-    for(int i = 0; i < tsv->size; i++)
-    {
+    automaton->root = ac_create_state();
+    
+    WordEntry *entries = ARRPTR(tsv);
+    for (int i = 0; i < tsv->size; i++) {
         char *lexeme = pnstrdup(STRPTR(tsv) + entries[i].pos, entries[i].len);
         ac_add_keyword(automaton->root, lexeme, i);
+        pfree(lexeme);
     }
-    
     ac_build_failure_links(automaton->root);
     ac_build_dictionary_links(automaton->root);
-
-    PG_RETURN_POINTER(automaton);
+    
+    int32 id = next_automaton_id++;
+    ac_automaton_entry *entry = hash_search(automaton_storage, &id, HASH_ENTER, NULL);
+    entry->id = id;
+    entry->automaton = automaton;
+    
+    MemoryContextSwitchTo(oldctx);
+    PG_RETURN_INT32(id);
 }
 
 
@@ -303,12 +336,20 @@ bool evaluate_query(QueryItem *item, TSQuery *tsq, ac_automaton *automaton)
 PG_FUNCTION_INFO_V1(ac_search);
 Datum ac_search(PG_FUNCTION_ARGS) 
 {
-    ac_automaton *automaton = (ac_automaton*)PG_GETARG_POINTER(0);
-    TSQuery tsq = PG_GETARG_TSQUERY(1);
+    int32 id = PG_GETARG_INT32(0);              // Get automaton id
+    TSQuery tsq = PG_GETARG_TSQUERY(1);         // Get TSQuery
+
+    // Look for the automaton
+    bool found;
+    ac_automaton_entry *entry = hash_search(automaton_storage, &id, HASH_FIND, &found);
+    // If not found, return false
+    if (!found)
+        PG_RETURN_BOOL(false);
+    // Else, evaluate
     QueryItem *items = GETQUERY(tsq);
     bool result = false;
 
-    result = evaluate_query(items, tsq, automaton);
+    result = evaluate_query(items, tsq, entry->automaton);
 
     PG_RETURN_BOOL(result);
 }
@@ -317,26 +358,42 @@ Datum ac_search(PG_FUNCTION_ARGS)
 PG_FUNCTION_INFO_V1(ac_search_text);
 Datum ac_search_text(PG_FUNCTION_ARGS) 
 {
-    ac_automaton *automaton = (ac_automaton*)PG_GETARG_POINTER(0);
-    text *input = PG_GETARG_TEXT_PP(1);
+    int32 id = PG_GETARG_INT32(0);              // Get automaton id
+    text *input = PG_GETARG_TEXT_PP(1);         // Get text
+
+    // Look for the automaton
+    bool found;
+    ac_automaton_entry *entry = hash_search(automaton_storage, &id, HASH_FIND, &found);
+    // If not found, return false
+    if (!found)
+        PG_RETURN_BOOL(false);
+    // Else, evaluate
     char *text_str = text_to_cstring(input);
     int entries_count = 0;
-    bool found = ac_contains(automaton->root, text_str, &entries_count);
+    bool result = ac_contains(entry->automaton->root, text_str, &entries_count);
     
     pfree(text_str);
-    PG_RETURN_BOOL(found);
+    PG_RETURN_BOOL(result);
 }
 
 
 PG_FUNCTION_INFO_V1(ac_rank_simple);
 Datum ac_rank_simple(PG_FUNCTION_ARGS)
 {
-    ac_automaton *automaton = (ac_automaton*)PG_GETARG_POINTER(0);
-    text *input = PG_GETARG_TEXT_PP(1);
+    int32 id = PG_GETARG_INT32(0);              // Get automaton id
+    text *input = PG_GETARG_TEXT_PP(1);         // Get text
+
+    // Look for the automaton
+    bool found;
+    ac_automaton_entry *entry = hash_search(automaton_storage, &id, HASH_FIND, &found);
+    // If not found, return false
+    if (!found)
+        PG_RETURN_FLOAT4(0.0);
+    // Else, evaluate
     char *text_str = text_to_cstring(input);
     
-    ac_match_result result = ac_match(automaton->root, text_str);
-    float4 score = (float)result.num_matches / automaton->tsv->size;
+    ac_match_result result = ac_match(entry->automaton->root, text_str);
+    float4 score = (float)result.num_matches / entry->automaton->tsv->size;
 
     pfree(result.matches);
     pfree(result.counts);
@@ -349,14 +406,19 @@ Datum ac_rank_simple(PG_FUNCTION_ARGS)
 PG_FUNCTION_INFO_V1(ac_automaton_in);
 Datum ac_automaton_in(PG_FUNCTION_ARGS)
 {
-    ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("ac_automaton_in not implemented")));
-    PG_RETURN_POINTER(NULL);
+    char *str = PG_GETARG_CSTRING(0);
+    ac_automaton *automaton = (ac_automaton*)palloc0(sizeof(ac_automaton));
+    automaton->tsv = DatumGetTSVector(DirectFunctionCall1(tsvectorin, CStringGetDatum(str)));
+    automaton->root = NULL;
+
+    PG_RETURN_POINTER(automaton);
 }
 
 
 PG_FUNCTION_INFO_V1(ac_automaton_out);
-Datum ac_automaton_out(PG_FUNCTION_ARGS)
-{
-    ereport(ERROR, (errcode(ERRCODE_FEATURE_NOT_SUPPORTED), errmsg("ac_automaton_out not implemented")));
-    PG_RETURN_CSTRING("\0");
+Datum ac_automaton_out(PG_FUNCTION_ARGS) {
+    ac_automaton *automaton = (ac_automaton *)PG_GETARG_POINTER(0);
+    Datum tsvectorDatum = TSVectorGetDatum(automaton->tsv);
+    char *result = DatumGetCString(DirectFunctionCall1(tsvectorout, tsvectorDatum));
+    PG_RETURN_CSTRING(result);
 }

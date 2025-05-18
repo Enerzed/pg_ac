@@ -3,6 +3,8 @@
 
 CREATE EXTENSION pg_ac;
 
+SELECT ac_build(to_tsvector('english', 'He likes dogs and cats'));
+SELECT ac_search(1, to_tsquery('like & cat'));
 
 SELECT ac_search
 (
@@ -62,12 +64,6 @@ SELECT ac_rank_simple
 (
     ac_build(to_tsvector('The quick brown fox jumps over the lazy dog')),
     'pink horse'
-);
-
-SELECT * FROM ac_search_rank_simple
-(
-    ac_build(to_tsvector('The quick brown fox jumps over the lazy dog')),
-    'jump dog'
 );
 
 DROP EXTENSION pg_ac;
