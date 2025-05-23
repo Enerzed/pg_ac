@@ -19,7 +19,7 @@ void _PG_init(void)
     ctl.keysize = sizeof(int32);
     ctl.entrysize = sizeof(ac_automaton_entry);
     ctl.hcxt = TopMemoryContext; // Use TopMemoryContext for global storage
-    automaton_storage = hash_create("automaton storage", 100, &ctl, HASH_ELEM | HASH_CONTEXT);
+    automaton_storage = hash_create("automaton storage", MAX_NUM_AUTOMATONS, &ctl, HASH_ELEM | HASH_CONTEXT);
 }
 
 
