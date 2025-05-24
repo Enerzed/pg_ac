@@ -11,19 +11,20 @@
  */
 
 
-// Init automaton storage
+/* Init automaton storage */ 
 void _PG_init(void) 
 {
     HASHCTL ctl;
     memset(&ctl, 0, sizeof(ctl));
-    ctl.keysize = sizeof(int32);
+    ctl.keysize = sizeof(int64);
     ctl.entrysize = sizeof(ac_automaton_entry);
-    ctl.hcxt = TopMemoryContext; // Use TopMemoryContext for global storage
-    automaton_storage = hash_create("automaton storage", MAX_NUM_AUTOMATONS, &ctl, HASH_ELEM | HASH_CONTEXT);
+    /* Use TopMemoryContext for global storage */
+    ctl.hcxt = TopMemoryContext; 
+    automaton_storage = hash_create("automaton storage", INITIAL_NELEM, &ctl, HASH_ELEM | HASH_CONTEXT);
 }
 
 
-// Finalize
+/* Finalize */ 
 void _PG_fini(void)
 {
     cleanup_automaton();
@@ -36,24 +37,25 @@ void _PG_fini(void)
  */
 
 
-// Init automaton storage
+/* Init automaton storage */ 
 static void init_automaton_storage()
 {
     HASHCTL ctl;
     memset(&ctl, 0, sizeof(ctl));
-    ctl.keysize = sizeof(int32);
-    ctl.entrysize = sizeof(int32) + sizeof(ac_automaton*);
-    automaton_storage = hash_create("automaton_storage", 100, &ctl, HASH_ELEM | HASH_ELEM);
+    ctl.keysize = sizeof(int64);
+    ctl.entrysize = sizeof(int64) + sizeof(ac_automaton*);
+    automaton_storage = hash_create("automaton_storage", INITIAL_NELEM, &ctl, HASH_ELEM | HASH_ELEM);
 }
 
 
-// Cleanup automaton
+/* Cleanup automatons */ 
 static void cleanup_automaton() 
 {
     HASH_SEQ_STATUS status;
-    hash_seq_init(&status, automaton_storage);
-
     ac_automaton *entry;
+    /* Init hash sequence */
+    hash_seq_init(&status, automaton_storage);
+    /* Free automatons */
     while((entry = (ac_automaton*)hash_seq_search(&status)) != NULL)
     {
         ac_free_trie(entry->root);
@@ -62,7 +64,7 @@ static void cleanup_automaton()
 }
 
 
-// Free trie
+/* Free trie */
 void ac_free_trie(ac_state* current)
 {
 	if (current == NULL)
@@ -85,19 +87,20 @@ void ac_free_trie(ac_state* current)
  */
 
 
-// Creates a new Aho Corasick state
+/* Creates a new Aho Corasick state */
 ac_state* ac_create_state()
 {
-    // Allocate and initialize a new state
+    /* Allocate and initialize a new state */
 	ac_state* state = (ac_state*)palloc0(sizeof(ac_state)); 
 	state->is_final = false;
 	state->index = -1;
+    state->depth = 0;
 	state->fail_link = NULL;
 	return state;
 }
 
 
-// Adds a keyword to the trie
+/* Adds a keyword to the trie */ 
 void ac_add_keyword(ac_state* root, const char* keyword, const int index)
 {
 	ac_state* current = root;
@@ -108,14 +111,15 @@ void ac_add_keyword(ac_state* root, const char* keyword, const int index)
             current->children[keyword[i]] = ac_create_state();
         }
         current = current->children[keyword[i]];
+        current->depth = i + 1;
     }
     current->is_final = true;
     current->index = index;
 }
 
 
-// Builds failure links
-void ac_build_failure_links(ac_state* root)
+/* Builds failure and dictionary links */ 
+void ac_build_links(ac_state* root)
 {
 	int queue_capacity= 16;
 	int queue_size = 0;
@@ -131,24 +135,20 @@ void ac_build_failure_links(ac_state* root)
 		{
 			ac_state* child = current->children[i];
 			if (child && current == root)
-			{
 				child->fail_link = root;
-			}
 			else if (child)
 			{
 				ac_state* fail = current->fail_link;
                 while(fail && !fail->children[i])
-				{
 					fail = fail->fail_link;
-				}
 				if (fail)
 				{
+                    if (fail->is_final)
+                        child->dictionary_link = fail->children[i];
 					child->fail_link = fail->children[i];
 				}
 				else 
-				{
 					child->fail_link = root;
-				}
 			}
 			if (child)
 			{
@@ -166,73 +166,14 @@ void ac_build_failure_links(ac_state* root)
 }
 
 
-// Builds dictionary links
-void ac_build_dictionary_links(ac_state* root)
-{
-    int queue_capacity = 16;
-    int queue_size = 0;
-    ac_state** queue = (ac_state**)palloc(queue_capacity * sizeof(ac_state*));
-    int front = 0, rear = 0;
-    
-    for (int i = 0; i < MAX_CHILDREN; i++) 
-	{
-        if (root->children[i]) 
-        {
-            if (queue_size == queue_capacity) 
-			{
-                queue_capacity *= 2;
-                queue = (ac_state**)repalloc(queue, queue_capacity * sizeof(ac_state*));
-            }
-            queue[rear++] = root->children[i];
-            queue_size++;
-        }
-    }
-    
-    while (front < rear) 
-	{
-        ac_state* current = queue[front++];
-        ac_state* fail = current->fail_link;
-
-        if (fail && fail->is_final)
-		{
-            current->dictionary_link = current->fail_link;
-        } 
-		else if (current->fail_link && fail->dictionary_link)
-		{
-            current->dictionary_link = fail->dictionary_link;
-        } 
-		else
-		{
-            current->dictionary_link = NULL;
-        }
-        
-        for (int i = 0; i < MAX_CHILDREN; i++) 
-		{
-            if (current->children[i]) 
-            {
-                if (queue_size == queue_capacity) 
-				{
-                    queue_capacity *= 2;
-                    queue = (ac_state**)repalloc(queue, queue_capacity * sizeof(ac_state*));
-                }
-                queue[rear++] = current->children[i];
-                queue_size++;
-            }
-        }
-    }
-    
-    pfree(queue);
-}
-
-
-// Matches a text against the trie and counts the number of matches
+/* Matches a text against the trie and counts the number of matches */
 ac_match_result ac_match(ac_state* root, char* text)
 {
     ac_state* current = root;
-
     ac_match_result result = {0};
     int *matches = palloc(16 * sizeof(int));
     int *counts = palloc(16 * sizeof(int));
+    char **lexemes = palloc(16 * sizeof(char*));
     int capacity = 16;
     
     for (int i = 0; i < text[i] != '\0'; i++) 
@@ -253,9 +194,11 @@ ac_match_result ac_match(ac_state* root, char* text)
                     capacity *= 2;
                     matches = repalloc(matches, capacity * sizeof(int));
                     counts = repalloc(counts, capacity * sizeof(int));
+                    lexemes = repalloc(lexemes, capacity * sizeof(char*));
                 }
                 matches[result.num_matches] = temp->index;
                 counts[result.num_matches] = 1;
+                lexemes[result.num_matches] = text + i - temp->depth + 1;
                 result.num_matches++;
             }
         }
@@ -263,11 +206,16 @@ ac_match_result ac_match(ac_state* root, char* text)
 
     result.matches = matches;
     result.counts = counts;
+    result.lexemes = lexemes;
     return result;
 }
 
 
-// Searches for a text in the trie and immediately returns if found
+/*
+ * Searches for a given text in the trie 
+ * (at least one match and not necessarily the same as in the text)
+ * and immediately returns if found 
+ */
 bool ac_contains(ac_state *root, const char *text) 
 {
     ac_state *current = root;
@@ -290,18 +238,22 @@ bool ac_contains(ac_state *root, const char *text)
 }
 
 
-// Helper function for ac_search (recursive)
+/* Helper function for ac_search (recursive) */
 bool evaluate_query(QueryItem *item, TSQuery *tsq, ac_automaton *automaton) 
 {
-    // If the item is a value 
+    /* If the item is a value */ 
     if (item->type == QI_VAL)            
     {
-        char *lexeme = pnstrdup(GETOPERAND(tsq) + item->qoperand.distance, item->qoperand.length);  // Get lexeme from TSQuery
-        bool found = ac_contains(automaton->root, lexeme);                                          // Look for that lexeme in the trie
+        char *lexeme;
+        bool found;
+        /* Get lexeme from TSQuery */
+        lexeme = pnstrdup(GETOPERAND(tsq) + item->qoperand.distance, item->qoperand.length);  
+        /* Look for that lexeme in the trie*/
+        found = ac_contains(automaton->root, lexeme);                                          
         pfree(lexeme);
         return found;
     }
-    // If the item is an operator
+    /* If the item is an operator */
     else if (item->type == QI_OPR)   
     {
         switch (item->qoperator.oper) 
@@ -327,8 +279,156 @@ bool evaluate_query(QueryItem *item, TSQuery *tsq, ac_automaton *automaton)
 
 Datum ac_rank_simple(PG_FUNCTION_ARGS)
 {
-    int32 id = PG_GETARG_INT32(0);              // Get automaton id
+    int64 id;
+    text *input;
+    bool found;
+    ac_automaton_entry *entry;
+    char *text_str;
+    ac_match_result result;
+    float4 score;
+    /* Get automaton id */ 
+    id = PG_GETARG_INT64(0);
+    /* Get text */
+    input = PG_GETARG_TEXT_PP(1);
+    /* Look for the automaton */ 
+    entry = hash_search(automaton_storage, &id, HASH_FIND, &found);
+    /* If not found, return false */ 
+    if (!found)
+        PG_RETURN_FLOAT4(0.0);
+    /* Else, evaluate */ 
+    text_str = text_to_cstring(input);
+    result = ac_match(entry->automaton->root, text_str);
+    score = (float)result.num_matches / entry->automaton->tsv->size;
+    /* Clean up */
+    pfree(result.matches);
+    pfree(result.counts);
+    pfree(text_str);
+    /* Return score */
+    PG_RETURN_FLOAT4(score);
+}
+
+
+/* Build Aho Corasick automaton */
+Datum ac_build(PG_FUNCTION_ARGS) 
+{
+    MemoryContext oldctx;;
+    TSVector tsv;
+    ac_automaton *automaton;
+    WordEntry *entries;
+    int64 id;
+    ac_automaton_entry *entry;
+    /* Set current memory context */ 
+    oldctx = MemoryContextSwitchTo(TopMemoryContext);
+    /* Get TSVector */
+    tsv = PG_GETARG_TSVECTOR_COPY(0);
+    /* Create automaton */ 
+    automaton = palloc0(sizeof(ac_automaton));
+    automaton->tsv = tsv;
+    automaton->root = ac_create_state();
+    /* Build trie */
+    entries = ARRPTR(tsv);
+    /* Get next automaton id*/
+    id = next_automaton_id++;
+    /* Add keywords to trie */
+    for (int i = 0; i < tsv->size; i++) 
+    {
+        char *lexeme;
+        lexeme = pnstrdup(STRPTR(tsv) + entries[i].pos, entries[i].len);
+        ac_add_keyword(automaton->root, lexeme, i);
+        pfree(lexeme);
+    }
+    /* Build links */
+    ac_build_links(automaton->root);
+    /* Store automaton */
+    entry = hash_search(automaton_storage, &id, HASH_ENTER, NULL);
+    entry->id = id;
+    entry->automaton = automaton;
+    /* Set old memory context and return */ 
+    MemoryContextSwitchTo(oldctx);
+    /* Return automaton id */
+    PG_RETURN_INT64(id);
+}
+
+
+/* Destroy Aho Corasick automaton */
+Datum ac_destroy(PG_FUNCTION_ARGS)
+{
+    int64 id;
+    bool found;
+    ac_automaton_entry *entry;
+    /* Get automaton id*/
+    id = PG_GETARG_INT64(0); 
+    /* Look for the automaton*/
+    entry = hash_search(automaton_storage, &id, HASH_FIND, &found);
+    /* If not found, return false */
+    if (!found)
+        PG_RETURN_BOOL(false);
+    /* Else, destroy */
+    ac_free_trie(entry->automaton->root);
+    hash_search(automaton_storage, &id, HASH_REMOVE, NULL);
+    /* Return true */
+    PG_RETURN_BOOL(true);
+}
+
+/* Search in Aho Corasick automaton using TSQuery */
+Datum ac_search_tsquery(PG_FUNCTION_ARGS) 
+{
+    int64 id;
+    TSQuery tsq;
+    bool found;
+    ac_automaton_entry *entry;
+    QueryItem *items;
+    bool result = false;
+    /* Get automaton id */
+    id = PG_GETARG_INT64(0);
+    /* Get TSQuery */
+    tsq = PG_GETARG_TSQUERY(1);
+    /* Look for the automaton */ 
+    entry = hash_search(automaton_storage, &id, HASH_FIND, &found);
+    /* If not found, return false */
+    if (!found)
+        PG_RETURN_BOOL(false);
+    /* Else, evaluate */
+    items = GETQUERY(tsq);
+    result = evaluate_query(items, tsq, entry->automaton);
+    /* Return result */
+    PG_RETURN_BOOL(result);
+}
+
+
+/* Search in Aho Corasick automaton using text */
+Datum ac_search_text(PG_FUNCTION_ARGS) 
+{
+    int64 id;
+    text *input;
+    bool found;
+    ac_automaton_entry *entry;
+    char *text_str;
+    bool result = false;
+    /* Get automaton id*/
+    id = PG_GETARG_INT64(0);
+    /* Get text */
+    input = PG_GETARG_TEXT_PP(1);
+    /* Look for the automaton */
+    entry = hash_search(automaton_storage, &id, HASH_FIND, &found);
+    /* If not found, return false */
+    if (!found)
+        PG_RETURN_BOOL(false);
+    /* Else, evaluate */
+    text_str = text_to_cstring(input);
+    result = ac_contains(entry->automaton->root, text_str);
+    pfree(text_str);
+    /* Return result */
+    PG_RETURN_BOOL(result);
+}
+
+
+Datum ac_match_text(PG_FUNCTION_ARGS) 
+{
+    int64 id = PG_GETARG_INT64(0);              // Get automaton id
     text *input = PG_GETARG_TEXT_PP(1);         // Get text
+    char *text_str = text_to_cstring(input);
+    ac_match_result result;
 
     // Look for the automaton
     bool found;
@@ -337,88 +437,11 @@ Datum ac_rank_simple(PG_FUNCTION_ARGS)
     if (!found)
         PG_RETURN_FLOAT4(0.0);
     // Else, evaluate
-    char *text_str = text_to_cstring(input);
-    
-    ac_match_result result = ac_match(entry->automaton->root, text_str);
-    float4 score = (float)result.num_matches / entry->automaton->tsv->size;
+    result = ac_match(entry->automaton->root, text_str);
 
     pfree(result.matches);
     pfree(result.counts);
+    pfree(result.lexemes);
     pfree(text_str);
     
-    PG_RETURN_FLOAT4(score);
-}
-
-
-// Build Aho Corasick automaton
-Datum ac_build(PG_FUNCTION_ARGS) 
-{
-    // Set current memory context
-    MemoryContext oldctx = MemoryContextSwitchTo(TopMemoryContext);
-    // Get TSVector
-    TSVector tsv = PG_GETARG_TSVECTOR_COPY(0);
-    // Create automaton
-    ac_automaton *automaton = palloc0(sizeof(ac_automaton));
-    automaton->tsv = tsv;
-    automaton->root = ac_create_state();
-    // Build trie
-    WordEntry *entries = ARRPTR(tsv);
-    for (int i = 0; i < tsv->size; i++) {
-        char *lexeme = pnstrdup(STRPTR(tsv) + entries[i].pos, entries[i].len);
-        ac_add_keyword(automaton->root, lexeme, i);
-        pfree(lexeme);
-    }
-    ac_build_failure_links(automaton->root);
-    ac_build_dictionary_links(automaton->root);
-    // Store automaton
-    int32 id = next_automaton_id++;
-    ac_automaton_entry *entry = hash_search(automaton_storage, &id, HASH_ENTER, NULL);
-    entry->id = id;
-    entry->automaton = automaton;
-    // Set old memory context and return
-    MemoryContextSwitchTo(oldctx);
-    PG_RETURN_INT32(id);
-}
-
-
-// Search in Aho Corasick automaton using TSQuery
-Datum ac_search(PG_FUNCTION_ARGS) 
-{
-    int32 id = PG_GETARG_INT32(0);              // Get automaton id
-    TSQuery tsq = PG_GETARG_TSQUERY(1);         // Get TSQuery
-
-    // Look for the automaton
-    bool found;
-    ac_automaton_entry *entry = hash_search(automaton_storage, &id, HASH_FIND, &found);
-    // If not found, return false
-    if (!found)
-        PG_RETURN_BOOL(false);
-    // Else, evaluate
-    QueryItem *items = GETQUERY(tsq);
-    bool result = false;
-
-    result = evaluate_query(items, tsq, entry->automaton);
-
-    PG_RETURN_BOOL(result);
-}
-
-
-// Search in Aho Corasick automaton using text
-Datum ac_search_text(PG_FUNCTION_ARGS) 
-{
-    int32 id = PG_GETARG_INT32(0);              // Get automaton id
-    text *input = PG_GETARG_TEXT_PP(1);         // Get text
-
-    // Look for the automaton
-    bool found;
-    ac_automaton_entry *entry = hash_search(automaton_storage, &id, HASH_FIND, &found);
-    // If not found, return false
-    if (!found)
-        PG_RETURN_BOOL(false);
-    // Else, evaluate
-    char *text_str = text_to_cstring(input);
-    bool result = ac_contains(entry->automaton->root, text_str);
-    
-    pfree(text_str);
-    PG_RETURN_BOOL(result);
 }

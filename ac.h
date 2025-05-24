@@ -44,7 +44,7 @@
 
 #define MAX_CHILDREN 256
 #define MAX_LEXEME_SIZE 256
-#define MAX_NUM_AUTOMATONS 1024
+#define INITIAL_NELEM 1024
 
 PG_MODULE_MAGIC;
 
@@ -56,6 +56,7 @@ typedef struct
 	struct ac_state* fail_link;													// Failure link traverses to the link that has the longest common prefix
 	struct ac_state* dictionary_link;											// Dictionary link traverses to the link that is also need to be considered
 	int index;																	// Index of the lexeme
+	int depth;
 	bool is_final;																// Is final
 
 } ac_state;
@@ -81,11 +82,12 @@ typedef struct
 	// Useful for ranking only
     int *matches;																// Match indices in the text
     int *counts;																// Number of matches (stored as 1 for each match index)
+	char **lexemes;																// Lexemes
     int num_matches;															// Total number of matches
-	int num_lexemes;															// Total number of lexemes
 } ac_match_result;
 
 
+/* Global variables for automaton storage */
 static HTAB *automaton_storage = NULL;
 static int next_automaton_id = 1;
 
@@ -102,22 +104,40 @@ void ac_free_trie(ac_state* current);
 
 
 /* Aho Corasick functions */
-ac_state* ac_create_state();													// Create Aho Corasick state
-void ac_add_keyword(ac_state* root, const char* keyword, const int index);		// Add keyword to the trie
-void ac_build_failure_links(ac_state* root);									// Build failure links for the trie
-void ac_build_dictionary_links(ac_state* root);									// Build dictionary links for the trie
-ac_match_result ac_match(ac_state* root, char* text);							// Match indices
-bool ac_contains(ac_state *root, const char *text);								// Look if the word is in the trie
-bool evaluate_query(QueryItem *item, TSQuery *tsq, ac_automaton *automaton);	// Evaluate query for the result
+
+/* Create and initialize Aho Corasick state */
+ac_state* ac_create_state();
+/* Add keyword to the trie */
+void ac_add_keyword(ac_state* root, const char* keyword, const int index);
+/* Build failure and dictionary links */
+void ac_build_links(ac_state* root);
+/* Match indices */
+ac_match_result ac_match(ac_state* root, char* text);
+/* Look if the word is in the trie */
+bool ac_contains(ac_state *root, const char *text);
+/* Evaluate query (recursive)*/
+bool evaluate_query(QueryItem *item, TSQuery *tsq, ac_automaton *automaton);
 
 
 /* PostgreSQL-specific functions */
-Datum ac_build(PG_FUNCTION_ARGS);												// Build Aho Corasick automaton
-Datum ac_search(PG_FUNCTION_ARGS);												// Search in Aho Corasick automaton using TSQuery
-Datum ac_search_text(PG_FUNCTION_ARGS);											// Search in Aho Corasick automaton using text
-Datum ac_rank_simple(PG_FUNCTION_ARGS);											// Rank search result
+
+/* Build Aho Corasick automaton */
+Datum ac_build(PG_FUNCTION_ARGS);
+/* Destroy Aho Corasick automaton */
+Datum ac_destroy(PG_FUNCTION_ARGS);
+/* Search in Aho Corasick automaton using TSQuery */
+Datum ac_search_tsquery(PG_FUNCTION_ARGS);
+/* Search in Aho Corasick automaton using text */
+Datum ac_search_text(PG_FUNCTION_ARGS);
+/* Match indices in Aho Corasick automaton using text */
+Datum ac_match_text(PG_FUNCTION_ARGS);
+/* Rank search result */
+Datum ac_rank_simple(PG_FUNCTION_ARGS);
+
 /* PostgreSQL initialize functions */
 PG_FUNCTION_INFO_V1(ac_build);
-PG_FUNCTION_INFO_V1(ac_search);
+PG_FUNCTION_INFO_V1(ac_destroy);
+PG_FUNCTION_INFO_V1(ac_search_tsquery);
 PG_FUNCTION_INFO_V1(ac_search_text);
+PG_FUNCTION_INFO_V1(ac_match_text);
 PG_FUNCTION_INFO_V1(ac_rank_simple);

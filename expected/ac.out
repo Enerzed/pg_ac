@@ -1,5 +1,7 @@
 --TEST CASES--
+/* Create extension */
 CREATE EXTENSION pg_ac;
+/* Prepare test data */
 SELECT ac_build(to_tsvector('english', 'Dogs and cats are the best pets'));
  ac_build 
 ----------
@@ -30,7 +32,7 @@ SELECT ac_build(to_tsvector('english', 'Quick brown fox jumps over the lazy dog'
         5
 (1 row)
 
-/*Test first automaton*/
+/* Test first automaton */
 SELECT ac_search(1, to_tsquery('english', 'dog & cat'));                        -- Should be true
  ac_search 
 -----------
@@ -49,7 +51,7 @@ SELECT ac_search(1, to_tsquery('english', 'dog | snake'));                      
  t
 (1 row)
 
-/*Test second automaton*/
+/* Test second automaton */
 SELECT ac_search(2, to_tsquery('english', 'pet & (cat | dog)'));                -- Should be true
  ac_search 
 -----------
@@ -68,7 +70,7 @@ SELECT ac_search(2, to_tsquery('english', 'likely'));                           
  f
 (1 row)
 
-/*Test third automaton*/
+/* Test third automaton */
 SELECT ac_search(3, to_tsquery('english', 'pet & (dog | cat)'));                -- Should be true
  ac_search 
 -----------
@@ -88,7 +90,7 @@ NOTICE:  text-search query doesn't contain lexemes: ""
  f
 (1 row)
 
-/*Test fourth automaton*/
+/* Test fourth automaton */
 SELECT ac_search(4, to_tsquery('english', 'are'));                              -- Should be false
 NOTICE:  text-search query contains only stop words or doesn't contain lexemes, ignored
  ac_search 
@@ -109,7 +111,7 @@ NOTICE:  text-search query contains only stop words or doesn't contain lexemes, 
  f
 (1 row)
 
-/*Test fifth automaton for ranked search*/
+/* Test fifth automaton for ranked search */
 SELECT ac_rank_simple(5, 'jump dog fox');                                       -- Should be 0.5
  ac_rank_simple 
 ----------------
@@ -126,6 +128,37 @@ SELECT ac_rank_simple(5,'pink horse');                                          
  ac_rank_simple 
 ----------------
               0
+(1 row)
+
+/* Clean up */
+SELECT ac_destroy(1);
+ ac_destroy 
+------------
+ t
+(1 row)
+
+SELECT ac_destroy(2);
+ ac_destroy 
+------------
+ t
+(1 row)
+
+SELECT ac_destroy(3);
+ ac_destroy 
+------------
+ t
+(1 row)
+
+SELECT ac_destroy(4);
+ ac_destroy 
+------------
+ t
+(1 row)
+
+SELECT ac_destroy(5);
+ ac_destroy 
+------------
+ t
 (1 row)
 
 DROP EXTENSION pg_ac;

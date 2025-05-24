@@ -3,29 +3,26 @@
 
 
 CREATE OR REPLACE FUNCTION ac_build(tsvector)
-RETURNS integer
+RETURNS bigint
 AS 'pg_ac', 'ac_build'
 LANGUAGE C STRICT;
 
-CREATE OR REPLACE FUNCTION ac_search(integer, tsquery)
+CREATE OR REPLACE FUNCTION ac_destroy(bigint)
 RETURNS boolean
-AS 'pg_ac', 'ac_search'
+AS 'pg_ac', 'ac_destroy'
 LANGUAGE C STRICT;
 
-CREATE OR REPLACE FUNCTION ac_search(integer, text)
+CREATE OR REPLACE FUNCTION ac_search(bigint, tsquery)
+RETURNS boolean
+AS 'pg_ac', 'ac_search_tsquery'
+LANGUAGE C STRICT;
+
+CREATE OR REPLACE FUNCTION ac_search(bigint, text)
 RETURNS boolean
 AS 'pg_ac', 'ac_search_text'
 LANGUAGE C STRICT;
 
-CREATE OR REPLACE FUNCTION ac_rank_simple(integer, text) 
+CREATE OR REPLACE FUNCTION ac_rank_simple(bigint, text) 
 RETURNS real
 AS 'pg_ac', 'ac_rank_simple'
 LANGUAGE C STRICT;
-
-/*
-CREATE OR REPLACE FUNCTION ac_search_rank_simple(ac_automaton, text) 
-RETURNS TABLE (found bool, rank float4)
-AS $$
-    SELECT ac_search($1, $2), ac_rank_simple($1, $2)
-$$ LANGUAGE SQL;
-*/
