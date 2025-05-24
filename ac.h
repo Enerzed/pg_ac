@@ -52,38 +52,50 @@ PG_MODULE_MAGIC;
 /* Aho Corasick trie node */
 typedef struct
 {
-	struct ac_state* children[MAX_CHILDREN];									// Children of the node
-	struct ac_state* fail_link;													// Failure link traverses to the link that has the longest common prefix
-	struct ac_state* dictionary_link;											// Dictionary link traverses to the link that is also need to be considered
-	int index;																	// Index of the lexeme
+	/* Children of the node */
+	struct ac_state* children[MAX_CHILDREN];
+	/* Failure link traverses to the link that has the longest common prefix */
+	struct ac_state* fail_link;
+	/* Dictionary link traverses to the link that is also need to be considered */
+	struct ac_state* dictionary_link;
+	/* Index of the lexeme */
+	int index;
+	/* Depth of the node */
 	int depth;
-	bool is_final;																// Is final
-
+	/* Is the node contains a lexeme */
+	bool is_final;
 } ac_state;
 
 
 /* Aho Corasick Automaton */
 typedef struct 
 {
-	ac_state *root;         													// Trie structure (transient, not stored)
-    TSVector tsv;           													// Original TSVector
+	/* Trie */
+	ac_state *root;
+	/* Original TSVector */
+    TSVector tsv;
 } ac_automaton;
 
 
+/* Aho Corasick automaton entry for storage */
 typedef struct
 {
+	/* Automaton id */
 	int32 id;
+	/* Automaton */
 	ac_automaton *automaton;
 } ac_automaton_entry;
 
 
+/* Useful for ranking only */
 typedef struct 
 {
-	// Useful for ranking only
-    int *matches;																// Match indices in the text
-    int *counts;																// Number of matches (stored as 1 for each match index)
-	char **lexemes;																// Lexemes
-    int num_matches;															// Total number of matches
+	/* Match indices */
+    int *matches;
+	/* Number of matches for each match index, stored as 1 for each match */
+    int *counts;
+	/* Total number of matches */
+    int num_matches;
 } ac_match_result;
 
 
