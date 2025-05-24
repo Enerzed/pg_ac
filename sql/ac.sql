@@ -35,10 +35,6 @@ SELECT ac_rank_simple(5,'fox');                                                 
 SELECT ac_rank_simple(5,'pink horse');                                          -- Should be 0
 
 /* Clean up */
-SELECT ac_destroy(1);
-SELECT ac_destroy(2);
-SELECT ac_destroy(3);
-SELECT ac_destroy(4);
-SELECT ac_destroy(5);
+SELECT ac_destroy_all();
 
 DROP EXTENSION pg_ac;

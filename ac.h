@@ -143,6 +143,8 @@ bool evaluate_query(QueryItem *item, TSQuery *tsq, ac_automaton *automaton);
 Datum ac_build(PG_FUNCTION_ARGS);
 /* Destroy Aho Corasick automaton */
 Datum ac_destroy(PG_FUNCTION_ARGS);
+/* Destroy all Aho Corasick automatons */
+Datum ac_destroy_all(PG_FUNCTION_ARGS);
 /* Search in Aho Corasick automaton using TSQuery */
 Datum ac_search_tsquery(PG_FUNCTION_ARGS);
 /* Search in Aho Corasick automaton using text */
@@ -157,6 +159,7 @@ Datum ac_rank_simple(PG_FUNCTION_ARGS);
 */
 PG_FUNCTION_INFO_V1(ac_build);
 PG_FUNCTION_INFO_V1(ac_destroy);
+PG_FUNCTION_INFO_V1(ac_destroy_all);
 PG_FUNCTION_INFO_V1(ac_search_tsquery);
 PG_FUNCTION_INFO_V1(ac_search_text);
 PG_FUNCTION_INFO_V1(ac_match_text);

@@ -131,33 +131,9 @@ SELECT ac_rank_simple(5,'pink horse');                                          
 (1 row)
 
 /* Clean up */
-SELECT ac_destroy(1);
- ac_destroy 
-------------
- t
-(1 row)
-
-SELECT ac_destroy(2);
- ac_destroy 
-------------
- t
-(1 row)
-
-SELECT ac_destroy(3);
- ac_destroy 
-------------
- t
-(1 row)
-
-SELECT ac_destroy(4);
- ac_destroy 
-------------
- t
-(1 row)
-
-SELECT ac_destroy(5);
- ac_destroy 
-------------
+SELECT ac_destroy_all();
+ ac_destroy_all 
+----------------
  t
 (1 row)
 

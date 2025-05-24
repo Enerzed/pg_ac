@@ -28,7 +28,6 @@ void _PG_init(void)
 void _PG_fini(void)
 {
     cleanup_automaton();
-    hash_destroy(automaton_storage);
 }
 
 
@@ -52,15 +51,28 @@ static void init_automaton_storage()
 static void cleanup_automaton() 
 {
     HASH_SEQ_STATUS status;
-    ac_automaton *entry;
-    /* Init hash sequence */
+    ac_automaton_entry *entry;
+
+    if (automaton_storage == NULL)
+        return;
+
     hash_seq_init(&status, automaton_storage);
-    /* Free automatons */
-    while((entry = (ac_automaton*)hash_seq_search(&status)) != NULL)
+
+    // Iterate through all entries and free associated automata
+    while ((entry = (ac_automaton_entry *) hash_seq_search(&status)) != NULL)
     {
-        ac_free_trie(entry->root);
-        pfree(entry);
+        ac_automaton *automaton = entry->automaton;
+        if (automaton) {
+            // Free the trie, TSVector, and automaton struct
+            ac_free_trie(automaton->root);
+            pfree(automaton->tsv);  // Free the TSVector copy
+            pfree(automaton);
+        }
     }
+
+    // Destroy the hash table after all entries are processed
+    hash_destroy(automaton_storage);
+    automaton_storage = NULL;
 }
 
 
@@ -366,6 +378,13 @@ Datum ac_destroy(PG_FUNCTION_ARGS)
     PG_RETURN_BOOL(true);
 }
 
+
+Datum ac_destroy_all(PG_FUNCTION_ARGS)
+{
+    cleanup_automaton();
+    PG_RETURN_BOOL(true);
+}
+
 /* Search in Aho Corasick automaton using TSQuery */
 Datum ac_search_tsquery(PG_FUNCTION_ARGS) 
 {
@@ -419,7 +438,7 @@ Datum ac_search_text(PG_FUNCTION_ARGS)
 }
 
 
-/* TODO */
+/* TODO DONT USE */
 Datum ac_match_text(PG_FUNCTION_ARGS) 
 {
     int64 id = PG_GETARG_INT64(0);              // Get automaton id
