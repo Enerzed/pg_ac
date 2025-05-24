@@ -109,13 +109,17 @@ void _PG_init(void);
 void _PG_fini(void);
 
 
-/* Memory management */
+/*
+ * Memory management 
+ */
 static void init_automaton_storage();
 static void cleanup_automaton();
 void ac_free_trie(ac_state* current);
 
 
-/* Aho Corasick functions */
+/*
+ * Aho Corasick functions 
+ */
 
 /* Create and initialize Aho Corasick state */
 ac_state* ac_create_state();
@@ -131,7 +135,9 @@ bool ac_contains(ac_state *root, const char *text);
 bool evaluate_query(QueryItem *item, TSQuery *tsq, ac_automaton *automaton);
 
 
-/* PostgreSQL-specific functions */
+/* 
+ * PostgreSQL-specific functions 
+ */
 
 /* Build Aho Corasick automaton */
 Datum ac_build(PG_FUNCTION_ARGS);
@@ -146,7 +152,9 @@ Datum ac_match_text(PG_FUNCTION_ARGS);
 /* Rank search result */
 Datum ac_rank_simple(PG_FUNCTION_ARGS);
 
-/* PostgreSQL initialize functions */
+/*
+ * PostgreSQL initialize functions 
+*/
 PG_FUNCTION_INFO_V1(ac_build);
 PG_FUNCTION_INFO_V1(ac_destroy);
 PG_FUNCTION_INFO_V1(ac_search_tsquery);

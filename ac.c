@@ -173,7 +173,6 @@ ac_match_result ac_match(ac_state* root, char* text)
     ac_match_result result = {0};
     int *matches = palloc(16 * sizeof(int));
     int *counts = palloc(16 * sizeof(int));
-    char **lexemes = palloc(16 * sizeof(char*));
     int capacity = 16;
     
     for (int i = 0; i < text[i] != '\0'; i++) 
@@ -194,11 +193,9 @@ ac_match_result ac_match(ac_state* root, char* text)
                     capacity *= 2;
                     matches = repalloc(matches, capacity * sizeof(int));
                     counts = repalloc(counts, capacity * sizeof(int));
-                    lexemes = repalloc(lexemes, capacity * sizeof(char*));
                 }
                 matches[result.num_matches] = temp->index;
                 counts[result.num_matches] = 1;
-                lexemes[result.num_matches] = text + i - temp->depth + 1;
                 result.num_matches++;
             }
         }
@@ -206,7 +203,6 @@ ac_match_result ac_match(ac_state* root, char* text)
 
     result.matches = matches;
     result.counts = counts;
-    result.lexemes = lexemes;
     return result;
 }
 
@@ -423,6 +419,7 @@ Datum ac_search_text(PG_FUNCTION_ARGS)
 }
 
 
+/* TODO */
 Datum ac_match_text(PG_FUNCTION_ARGS) 
 {
     int64 id = PG_GETARG_INT64(0);              // Get automaton id
@@ -441,7 +438,6 @@ Datum ac_match_text(PG_FUNCTION_ARGS)
 
     pfree(result.matches);
     pfree(result.counts);
-    pfree(result.lexemes);
     pfree(text_str);
     
 }
