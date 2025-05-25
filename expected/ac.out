@@ -1,6 +1,13 @@
 --TEST CASES--
 /* Create extension */
 CREATE EXTENSION pg_ac;
+/* Init automaton storage */
+SELECT ac_init();
+ ac_init 
+---------
+ t
+(1 row)
+
 /* Prepare test data */
 SELECT ac_build(to_tsvector('english', 'Dogs and cats are the best pets'));
  ac_build 
@@ -131,9 +138,9 @@ SELECT ac_rank_simple(5,'pink horse');                                          
 (1 row)
 
 /* Clean up */
-SELECT ac_destroy_all();
- ac_destroy_all 
-----------------
+SELECT ac_fini();
+ ac_fini 
+---------
  t
 (1 row)
 

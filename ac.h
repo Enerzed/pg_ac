@@ -44,7 +44,7 @@
 
 #define MAX_CHILDREN 256
 #define MAX_LEXEME_SIZE 256
-#define INITIAL_NELEM 1024
+#define INITIAL_NELEM 256
 
 PG_MODULE_MAGIC;
 
@@ -72,8 +72,9 @@ typedef struct
 {
 	/* Trie */
 	ac_state *root;
-	/* Original TSVector */
-    TSVector tsv;
+	/* Total number of lexemes */
+    int num_lexemes;
+	MemoryContext ctx;
 } ac_automaton;
 
 
@@ -141,10 +142,12 @@ bool evaluate_query(QueryItem *item, TSQuery *tsq, ac_automaton *automaton);
 
 /* Build Aho Corasick automaton */
 Datum ac_build(PG_FUNCTION_ARGS);
+/* Init Aho Corasick automaton storage */
+Datum ac_init(PG_FUNCTION_ARGS);
+/* Destroy all Aho Corasick automatons */
+Datum ac_fini(PG_FUNCTION_ARGS);
 /* Destroy Aho Corasick automaton */
 Datum ac_destroy(PG_FUNCTION_ARGS);
-/* Destroy all Aho Corasick automatons */
-Datum ac_destroy_all(PG_FUNCTION_ARGS);
 /* Search in Aho Corasick automaton using TSQuery */
 Datum ac_search_tsquery(PG_FUNCTION_ARGS);
 /* Search in Aho Corasick automaton using text */
@@ -158,8 +161,9 @@ Datum ac_rank_simple(PG_FUNCTION_ARGS);
  * PostgreSQL initialize functions 
 */
 PG_FUNCTION_INFO_V1(ac_build);
+PG_FUNCTION_INFO_V1(ac_init);
 PG_FUNCTION_INFO_V1(ac_destroy);
-PG_FUNCTION_INFO_V1(ac_destroy_all);
+PG_FUNCTION_INFO_V1(ac_fini);
 PG_FUNCTION_INFO_V1(ac_search_tsquery);
 PG_FUNCTION_INFO_V1(ac_search_text);
 PG_FUNCTION_INFO_V1(ac_match_text);

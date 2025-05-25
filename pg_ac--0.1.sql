@@ -12,9 +12,14 @@ RETURNS boolean
 AS 'pg_ac', 'ac_destroy'
 LANGUAGE C STRICT;
 
-CREATE OR REPLACE FUNCTION ac_destroy_all()
+CREATE OR REPLACE FUNCTION ac_init()
 RETURNS boolean
-AS 'pg_ac', 'ac_destroy_all'
+AS 'pg_ac', 'ac_init'
+LANGUAGE C STRICT;
+
+CREATE OR REPLACE FUNCTION ac_fini()
+RETURNS boolean
+AS 'pg_ac', 'ac_fini'
 LANGUAGE C STRICT;
 
 CREATE OR REPLACE FUNCTION ac_search(bigint, tsquery)

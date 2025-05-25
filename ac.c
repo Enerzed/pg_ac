@@ -14,6 +14,29 @@
 /* Init automaton storage */ 
 void _PG_init(void) 
 {
+    /* Init automaton storage is currently not called on extension load until _PG_fini actually works
+     * ac_init();
+     */
+}
+
+
+/* Finalize */ 
+void _PG_fini(void)
+{
+    /* Fini automaton storage is currently not called on extension load until _PG_fini actually works
+     * ac_init();
+     */
+}
+
+
+/*
+ * Memory management
+ */
+
+
+/* Init automaton storage */ 
+static void _ac_init() 
+{
     HASHCTL ctl;
     memset(&ctl, 0, sizeof(ctl));
     ctl.keysize = sizeof(int64);
@@ -24,31 +47,8 @@ void _PG_init(void)
 }
 
 
-/* Finalize */ 
-void _PG_fini(void)
-{
-    cleanup_automaton();
-}
-
-
-/*
- * Memory management
- */
-
-
-/* Init automaton storage */ 
-static void init_automaton_storage()
-{
-    HASHCTL ctl;
-    memset(&ctl, 0, sizeof(ctl));
-    ctl.keysize = sizeof(int64);
-    ctl.entrysize = sizeof(int64) + sizeof(ac_automaton*);
-    automaton_storage = hash_create("automaton_storage", INITIAL_NELEM, &ctl, HASH_ELEM | HASH_ELEM);
-}
-
-
 /* Cleanup automatons */ 
-static void cleanup_automaton() 
+static void _ac_fini() 
 {
     HASH_SEQ_STATUS status;
     ac_automaton_entry *entry;
@@ -58,19 +58,20 @@ static void cleanup_automaton()
 
     hash_seq_init(&status, automaton_storage);
 
-    // Iterate through all entries and free associated automata
+    /*  Iterate through all entries and free associated automaton */
     while ((entry = (ac_automaton_entry *) hash_seq_search(&status)) != NULL)
     {
         ac_automaton *automaton = entry->automaton;
-        if (automaton) {
-            // Free the trie, TSVector, and automaton struct
+        if (automaton) 
+        {
+            /* Free the trie, TSVector, and automaton struct */
             ac_free_trie(automaton->root);
-            pfree(automaton->tsv);  // Free the TSVector copy
+            MemoryContextDelete(entry->automaton->ctx);
             pfree(automaton);
         }
     }
 
-    // Destroy the hash table after all entries are processed
+    /* Destroy the hash table after all entries are processed */
     hash_destroy(automaton_storage);
     automaton_storage = NULL;
 }
@@ -285,6 +286,22 @@ bool evaluate_query(QueryItem *item, TSQuery *tsq, ac_automaton *automaton)
  */
 
 
+/* Init Aho Corasick automaton storage */
+Datum ac_init(PG_FUNCTION_ARGS)
+{
+    _ac_init();
+    PG_RETURN_BOOL(true);
+}
+
+
+/* Fini Aho Corasick automaton storage */
+Datum ac_fini(PG_FUNCTION_ARGS)
+{
+    _ac_fini();
+    PG_RETURN_BOOL(true);
+}
+
+
 Datum ac_rank_simple(PG_FUNCTION_ARGS)
 {
     int64 id;
@@ -306,7 +323,7 @@ Datum ac_rank_simple(PG_FUNCTION_ARGS)
     /* Else, evaluate */ 
     text_str = text_to_cstring(input);
     result = ac_match(entry->automaton->root, text_str);
-    score = (float)result.num_matches / entry->automaton->tsv->size;
+    score = (float)result.num_matches / entry->automaton->num_lexemes;
     /* Clean up */
     pfree(result.matches);
     pfree(result.counts);
@@ -320,19 +337,23 @@ Datum ac_rank_simple(PG_FUNCTION_ARGS)
 Datum ac_build(PG_FUNCTION_ARGS) 
 {
     MemoryContext oldctx;;
+    MemoryContext ctx;
     TSVector tsv;
     ac_automaton *automaton;
     WordEntry *entries;
     int64 id;
     ac_automaton_entry *entry;
+    /**/
+    ctx = AllocSetContextCreate(TopMemoryContext, "Automaton context", ALLOCSET_DEFAULT_SIZES);
     /* Set current memory context */ 
-    oldctx = MemoryContextSwitchTo(TopMemoryContext);
+    oldctx = MemoryContextSwitchTo(ctx);
     /* Get TSVector */
     tsv = PG_GETARG_TSVECTOR_COPY(0);
     /* Create automaton */ 
     automaton = palloc0(sizeof(ac_automaton));
-    automaton->tsv = tsv;
+    automaton->num_lexemes = tsv->size;
     automaton->root = ac_create_state();
+    automaton->ctx = ctx;
     /* Build trie */
     entries = ARRPTR(tsv);
     /* Get next automaton id*/
@@ -373,17 +394,12 @@ Datum ac_destroy(PG_FUNCTION_ARGS)
         PG_RETURN_BOOL(false);
     /* Else, destroy */
     ac_free_trie(entry->automaton->root);
+    MemoryContextDelete(entry->automaton->ctx);
     hash_search(automaton_storage, &id, HASH_REMOVE, NULL);
     /* Return true */
     PG_RETURN_BOOL(true);
 }
 
-
-Datum ac_destroy_all(PG_FUNCTION_ARGS)
-{
-    cleanup_automaton();
-    PG_RETURN_BOOL(true);
-}
 
 /* Search in Aho Corasick automaton using TSQuery */
 Datum ac_search_tsquery(PG_FUNCTION_ARGS) 

@@ -2,6 +2,8 @@
 
 /* Create extension */
 CREATE EXTENSION pg_ac;
+/* Init automaton storage */
+SELECT ac_init();
 /* Prepare test data */
 SELECT ac_build(to_tsvector('english', 'Dogs and cats are the best pets'));
 SELECT ac_build(to_tsvector('english', 'Dogs are the best pets'));
@@ -35,6 +37,6 @@ SELECT ac_rank_simple(5,'fox');                                                 
 SELECT ac_rank_simple(5,'pink horse');                                          -- Should be 0
 
 /* Clean up */
-SELECT ac_destroy_all();
+SELECT ac_fini();
 
 DROP EXTENSION pg_ac;
