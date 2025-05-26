@@ -10,6 +10,7 @@ SELECT ac_build(to_tsvector('english', 'Dogs are the best pets'));
 SELECT ac_build(to_tsvector('english', 'Cats are the best pets'));
 SELECT ac_build(to_tsvector('english', 'Snakes are the best animals'));
 SELECT ac_build(to_tsvector('english', 'Quick brown fox jumps over the lazy dog'));
+SELECT ac_build(ARRAY['quick', 'brown', 'fox', 'jumps', 'over', 'the', 'lazy', 'dog']);
 
 /* Test first automaton */
 SELECT ac_search(1, to_tsquery('english', 'dog & cat'));                        -- Should be true
@@ -36,6 +37,9 @@ SELECT ac_rank_simple(5, 'jump dog fox');                                       
 SELECT ac_rank_simple(5,'fox');                                                 -- Should be 0.1(6)
 SELECT ac_rank_simple(5,'pink horse');                                          -- Should be 0
 
+/* Matches for fifth and sixth automaton, index structure is the same as corresponding TSVector indexes */
+SELECT ac_match_text(5, 'quick quick jump dog fox');                            -- Should be 1,1,4,8,3
+SELECT ac_match_text(6, 'quick quick jump dog fox');                            -- Should be 1,1,8,3
 /* Clean up */
 SELECT ac_fini();
 

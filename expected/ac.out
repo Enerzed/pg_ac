@@ -137,6 +137,13 @@ SELECT ac_rank_simple(5,'pink horse');                                          
               0
 (1 row)
 
+/* Matches for fifth and sixth automaton, index structure is the same as corresponding TSVector indexes */
+SELECT ac_match_text(5, 'quick quick jump dog fox');                            -- Should be 1,1,4,8,3
+ ac_match_text 
+---------------
+ {1,1,4,8,3}
+(1 row)
+
 /* Clean up */
 SELECT ac_fini();
  ac_fini 

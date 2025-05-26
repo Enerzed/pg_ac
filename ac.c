@@ -301,75 +301,104 @@ Datum ac_fini(PG_FUNCTION_ARGS)
 }
 
 
-Datum ac_rank_simple(PG_FUNCTION_ARGS)
-{
-    int64 id;
-    text *input;
-    bool found;
-    ac_automaton_entry *entry;
-    char *text_str;
-    ac_match_result result;
-    float4 score;
-    /* Get automaton id */ 
-    id = PG_GETARG_INT64(0);
-    /* Get text */
-    input = PG_GETARG_TEXT_PP(1);
-    /* Look for the automaton */ 
-    entry = hash_search(automaton_storage, &id, HASH_FIND, &found);
-    /* If not found, return false */ 
-    if (!found)
-        PG_RETURN_FLOAT4(0.0);
-    /* Else, evaluate */ 
-    text_str = text_to_cstring(input);
-    result = ac_match(entry->automaton->root, text_str);
-    score = (float)result.num_matches / entry->automaton->num_lexemes;
-    /* Clean up */
-    pfree(result.matches);
-    pfree(result.counts);
-    pfree(text_str);
-    /* Return score */
-    PG_RETURN_FLOAT4(score);
-}
-
-
 /* Build Aho Corasick automaton */
-Datum ac_build(PG_FUNCTION_ARGS) 
+Datum ac_build_tsvector(PG_FUNCTION_ARGS) 
 {
-    MemoryContext oldctx;;
-    TSVector tsv;
+    TSVector tsv = PG_GETARG_TSVECTOR_COPY(0);
+    WordEntry *entries = ARRPTR(tsv);
     ac_automaton *automaton;
-    WordEntry *entries;
     int64 id;
     ac_automaton_entry *entry;
-    /* Set current memory context */ 
+    MemoryContext oldctx;
+
     oldctx = MemoryContextSwitchTo(TopMemoryContext);
-    /* Get TSVector */
-    tsv = PG_GETARG_TSVECTOR_COPY(0);
-    /* Create automaton */ 
-    automaton = palloc0(sizeof(ac_automaton));
+
+    /* Initialize automaton */
+    automaton = (ac_automaton *)palloc0(sizeof(ac_automaton));
     automaton->num_lexemes = tsv->size;
     automaton->root = ac_create_state();
-    /* Build trie */
-    entries = ARRPTR(tsv);
-    /* Get next automaton id*/
-    id = next_automaton_id++;
-    /* Add keywords to trie */
+
+    /* Add keywords with their original positional indexes */
     for (int i = 0; i < tsv->size; i++) 
     {
-        char *lexeme;
-        lexeme = pnstrdup(STRPTR(tsv) + entries[i].pos, entries[i].len);
-        ac_add_keyword(automaton->root, lexeme, i);
+        WordEntry *entry = &entries[i];
+        char *lexeme = pnstrdup(STRPTR(tsv) + entry->pos, entry->len);
+        int32 index = -1;
+
+        /* Extract the first positional index from tsvector */
+        if (entry->haspos) 
+        {
+            uint16      npos = POSDATALEN(tsv, entry);
+            WordEntryPos *pos_ptr = POSDATAPTR(tsv, entry);
+            if (npos > 0)
+                index = (int32) WEP_GETPOS(pos_ptr[0]);
+        }
+
+        if (index == -1)
+            ereport(ERROR, (errcode(ERRCODE_DATA_EXCEPTION),
+                    errmsg("tsvector entry has no positional data")));
+
+        /* Add to trie with the extracted index */
+        ac_add_keyword(automaton->root, lexeme, index);
         pfree(lexeme);
     }
-    /* Build links */
+
     ac_build_links(automaton->root);
+
     /* Store automaton */
+    id = next_automaton_id++;
     entry = hash_search(automaton_storage, &id, HASH_ENTER, NULL);
     entry->id = id;
     entry->automaton = automaton;
-    /* Set old memory context and return */ 
+
     MemoryContextSwitchTo(oldctx);
-    /* Return automaton id */
+    PG_RETURN_INT64(id);
+}
+
+
+Datum ac_build_array(PG_FUNCTION_ARGS)
+{
+    ArrayType *input_array = PG_GETARG_ARRAYTYPE_P(0);
+    ac_automaton *automaton;
+    MemoryContext oldctx;
+    int64 id;
+    ac_automaton_entry *entry;
+    Datum *lexeme_datums;
+    bool *nulls;
+    int nlexemes;
+    int i;
+
+    /* Get array elements */
+    deconstruct_array(input_array, TEXTOID, -1, false, 'i', &lexeme_datums, &nulls, &nlexemes);
+
+    oldctx = MemoryContextSwitchTo(TopMemoryContext);
+
+    /* Initialize automaton */
+    automaton = (ac_automaton *)palloc0(sizeof(ac_automaton));
+    automaton->num_lexemes = nlexemes;
+    automaton->root = ac_create_state();
+
+    /* Add lexemes with array indexes */
+    for (i = 0; i < nlexemes; i++) 
+    {
+        char *lexeme;
+        if (nulls[i])
+            ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED), errmsg("array element cannot be NULL")));
+
+        lexeme = TextDatumGetCString(lexeme_datums[i]);
+        ac_add_keyword(automaton->root, lexeme, i + 1);
+        pfree(lexeme);
+    }
+
+    ac_build_links(automaton->root);
+
+    /* Store automaton */
+    id = next_automaton_id++;
+    entry = hash_search(automaton_storage, &id, HASH_ENTER, NULL);
+    entry->id = id;
+    entry->automaton = automaton;
+
+    MemoryContextSwitchTo(oldctx);
     PG_RETURN_INT64(id);
 }
 
@@ -377,11 +406,9 @@ Datum ac_build(PG_FUNCTION_ARGS)
 /* Destroy Aho Corasick automaton */
 Datum ac_destroy(PG_FUNCTION_ARGS)
 {
-    int64 id;
+    int64 id = PG_GETARG_INT64(0); 
     bool found;
     ac_automaton_entry *entry;
-    /* Get automaton id*/
-    id = PG_GETARG_INT64(0); 
     /* Look for the automaton*/
     entry = hash_search(automaton_storage, &id, HASH_FIND, &found);
     /* If not found, return false */
@@ -398,16 +425,12 @@ Datum ac_destroy(PG_FUNCTION_ARGS)
 /* Search in Aho Corasick automaton using TSQuery */
 Datum ac_search_tsquery(PG_FUNCTION_ARGS) 
 {
-    int64 id;
-    TSQuery tsq;
+    int64 id = PG_GETARG_INT64(0);;
+    TSQuery tsq = PG_GETARG_TSQUERY(1);;
     bool found;
     ac_automaton_entry *entry;
     QueryItem *items;
     bool result = false;
-    /* Get automaton id */
-    id = PG_GETARG_INT64(0);
-    /* Get TSQuery */
-    tsq = PG_GETARG_TSQUERY(1);
     /* Look for the automaton */ 
     entry = hash_search(automaton_storage, &id, HASH_FIND, &found);
     /* If not found, return false */
@@ -424,16 +447,12 @@ Datum ac_search_tsquery(PG_FUNCTION_ARGS)
 /* Search in Aho Corasick automaton using text */
 Datum ac_search_text(PG_FUNCTION_ARGS) 
 {
-    int64 id;
-    text *input;
+    int64 id = PG_GETARG_INT64(0);
+    text *input = PG_GETARG_TEXT_PP(1);
     bool found;
     ac_automaton_entry *entry;
     char *text_str;
     bool result = false;
-    /* Get automaton id*/
-    id = PG_GETARG_INT64(0);
-    /* Get text */
-    input = PG_GETARG_TEXT_PP(1);
     /* Look for the automaton */
     entry = hash_search(automaton_storage, &id, HASH_FIND, &found);
     /* If not found, return false */
@@ -448,25 +467,73 @@ Datum ac_search_text(PG_FUNCTION_ARGS)
 }
 
 
-/* TODO DONT USE */
 Datum ac_match_text(PG_FUNCTION_ARGS) 
 {
-    int64 id = PG_GETARG_INT64(0);              // Get automaton id
-    text *input = PG_GETARG_TEXT_PP(1);         // Get text
+    int64 id = PG_GETARG_INT64(0);
+    text *input = PG_GETARG_TEXT_PP(1);
     char *text_str = text_to_cstring(input);
     ac_match_result result;
-
-    // Look for the automaton
+    Datum *elements;
+    ArrayType *array;
+    int16 elmlen;
+    bool elmbyval;
+    char elmalign;
     bool found;
-    ac_automaton_entry *entry = hash_search(automaton_storage, &id, HASH_FIND, &found);
-    // If not found, return false
-    if (!found)
-        PG_RETURN_FLOAT4(0.0);
-    // Else, evaluate
-    result = ac_match(entry->automaton->root, text_str);
+    ac_automaton_entry *entry;
 
+    /* Lookup automaton */
+    entry = hash_search(automaton_storage, &id, HASH_FIND, &found);
+    if (!found)
+        PG_RETURN_NULL();  // Or return empty array: PG_RETURN_ARRAYTYPE_P(construct_empty_array(INT4OID))
+
+    /* Get matches */
+    result = ac_match(entry->automaton->root, text_str);
+    
+    /* Convert matches to PostgreSQL array */
+    if (result.num_matches == 0)
+        PG_RETURN_NULL();
+
+    elements = (Datum *)palloc(sizeof(Datum) * result.num_matches);
+    for (int i = 0; i < result.num_matches; i++) 
+    {
+        elements[i] = Int32GetDatum(result.matches[i]);
+    }
+
+    get_typlenbyvalalign(INT4OID, &elmlen, &elmbyval, &elmalign);
+    array = construct_array(elements, result.num_matches, INT4OID, elmlen, elmbyval, elmalign);
+
+    /* Cleanup */
     pfree(result.matches);
     pfree(result.counts);
     pfree(text_str);
-    
+    pfree(elements);
+
+    PG_RETURN_ARRAYTYPE_P(array);
+}
+
+
+Datum ac_rank_simple(PG_FUNCTION_ARGS)
+{
+    int64 id = PG_GETARG_INT64(0);
+    text *input = PG_GETARG_TEXT_PP(1);
+    bool found;
+    ac_automaton_entry *entry;
+    char *text_str;
+    ac_match_result result;
+    float4 score;
+    /* Look for the automaton */ 
+    entry = hash_search(automaton_storage, &id, HASH_FIND, &found);
+    /* If not found, return false */ 
+    if (!found)
+        PG_RETURN_FLOAT4(0.0);
+    /* Else, evaluate */ 
+    text_str = text_to_cstring(input);
+    result = ac_match(entry->automaton->root, text_str);
+    score = (float)result.num_matches / entry->automaton->num_lexemes;
+    /* Clean up */
+    pfree(result.matches);
+    pfree(result.counts);
+    pfree(text_str);
+    /* Return score */
+    PG_RETURN_FLOAT4(score);
 }

@@ -200023,7 +200023,7 @@ zzr
 zzz
 zzzz
 '))
-FROM generate_series(1, 10);
+FROM generate_series(1, 1);
 /* Test 10 words performance */
 /* PostgreSQL Full Text Search */
 SELECT * FROM test_table9

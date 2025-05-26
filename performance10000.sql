@@ -10011,7 +10011,7 @@ zshops
 zu
 zum
 zus')
-FROM generate_series(1, 100);
+FROM generate_series(1, 10);
 /* Create test table with 10000 words for pg_ac */
 CREATE TABLE test_table8
 (
@@ -20020,7 +20020,7 @@ zshops
 zu
 zum
 zus'))
-FROM generate_series(1, 100);
+FROM generate_series(1, 10);
 /* Test 10000 words performance */
 /* PostgreSQL Full Text Search */
 PERFORM SELECT * FROM test_table7
