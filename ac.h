@@ -74,7 +74,6 @@ typedef struct
 	ac_state *root;
 	/* Total number of lexemes */
     int num_lexemes;
-	MemoryContext ctx;
 } ac_automaton;
 
 

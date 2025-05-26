@@ -66,7 +66,6 @@ static void _ac_fini()
         {
             /* Free the trie, TSVector, and automaton struct */
             ac_free_trie(automaton->root);
-            MemoryContextDelete(entry->automaton->ctx);
             pfree(automaton);
         }
     }
@@ -337,23 +336,19 @@ Datum ac_rank_simple(PG_FUNCTION_ARGS)
 Datum ac_build(PG_FUNCTION_ARGS) 
 {
     MemoryContext oldctx;;
-    MemoryContext ctx;
     TSVector tsv;
     ac_automaton *automaton;
     WordEntry *entries;
     int64 id;
     ac_automaton_entry *entry;
-    /**/
-    ctx = AllocSetContextCreate(TopMemoryContext, "Automaton context", ALLOCSET_DEFAULT_SIZES);
     /* Set current memory context */ 
-    oldctx = MemoryContextSwitchTo(ctx);
+    oldctx = MemoryContextSwitchTo(TopMemoryContext);
     /* Get TSVector */
     tsv = PG_GETARG_TSVECTOR_COPY(0);
     /* Create automaton */ 
     automaton = palloc0(sizeof(ac_automaton));
     automaton->num_lexemes = tsv->size;
     automaton->root = ac_create_state();
-    automaton->ctx = ctx;
     /* Build trie */
     entries = ARRPTR(tsv);
     /* Get next automaton id*/
@@ -394,7 +389,6 @@ Datum ac_destroy(PG_FUNCTION_ARGS)
         PG_RETURN_BOOL(false);
     /* Else, destroy */
     ac_free_trie(entry->automaton->root);
-    MemoryContextDelete(entry->automaton->ctx);
     hash_search(automaton_storage, &id, HASH_REMOVE, NULL);
     /* Return true */
     PG_RETURN_BOOL(true);

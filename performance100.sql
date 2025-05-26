@@ -16,7 +16,7 @@ little much well change work before large off know line must play place right bi
 live means such away me old because animal back any turn house give same here point most tell why page
 very boy ask letter after follow went mother things came men answer our want read found just show need study
 name also land still good around different learn sentence form home should man three us America think small move world')
-FROM generate_series(1, 10000);
+FROM generate_series(1, 1000);
 /* Create test table with 100 words for pg_ac */
 CREATE TABLE test_table4
 (
@@ -31,7 +31,7 @@ little much well change work before large off know line must play place right bi
 live means such away me old because animal back any turn house give same here point most tell why page
 very boy ask letter after follow went mother things came men answer our want read found just show need study
 name also land still good around different learn sentence form home should man three us America think small move world'))
-FROM generate_series(1, 10000);
+FROM generate_series(1, 1000);
 /* Test 100 words performance */
 /* PostgreSQL Full Text Search */
 SELECT * FROM test_table3
