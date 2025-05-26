@@ -335,8 +335,7 @@ Datum ac_build_tsvector(PG_FUNCTION_ARGS)
         }
 
         if (index == -1)
-            ereport(ERROR, (errcode(ERRCODE_DATA_EXCEPTION),
-                    errmsg("tsvector entry has no positional data")));
+            ereport(ERROR, (errcode(ERRCODE_DATA_EXCEPTION), errmsg("tsvector entry has no positional data")));
 
         /* Add to trie with the extracted index */
         ac_add_keyword(automaton->root, lexeme, index);
@@ -409,14 +408,18 @@ Datum ac_destroy(PG_FUNCTION_ARGS)
     int64 id = PG_GETARG_INT64(0); 
     bool found;
     ac_automaton_entry *entry;
+
     /* Look for the automaton*/
     entry = hash_search(automaton_storage, &id, HASH_FIND, &found);
+
     /* If not found, return false */
     if (!found)
         PG_RETURN_BOOL(false);
+
     /* Else, destroy */
     ac_free_trie(entry->automaton->root);
     hash_search(automaton_storage, &id, HASH_REMOVE, NULL);
+    
     /* Return true */
     PG_RETURN_BOOL(true);
 }
@@ -431,14 +434,18 @@ Datum ac_search_tsquery(PG_FUNCTION_ARGS)
     ac_automaton_entry *entry;
     QueryItem *items;
     bool result = false;
+
     /* Look for the automaton */ 
     entry = hash_search(automaton_storage, &id, HASH_FIND, &found);
+
     /* If not found, return false */
     if (!found)
         PG_RETURN_BOOL(false);
+
     /* Else, evaluate */
     items = GETQUERY(tsq);
     result = evaluate_query(items, tsq, entry->automaton);
+
     /* Return result */
     PG_RETURN_BOOL(result);
 }
@@ -453,15 +460,19 @@ Datum ac_search_text(PG_FUNCTION_ARGS)
     ac_automaton_entry *entry;
     char *text_str;
     bool result = false;
+
     /* Look for the automaton */
     entry = hash_search(automaton_storage, &id, HASH_FIND, &found);
+
     /* If not found, return false */
     if (!found)
         PG_RETURN_BOOL(false);
+
     /* Else, evaluate */
     text_str = text_to_cstring(input);
     result = ac_contains(entry->automaton->root, text_str);
     pfree(text_str);
+
     /* Return result */
     PG_RETURN_BOOL(result);
 }
@@ -484,7 +495,7 @@ Datum ac_match_text(PG_FUNCTION_ARGS)
     /* Lookup automaton */
     entry = hash_search(automaton_storage, &id, HASH_FIND, &found);
     if (!found)
-        PG_RETURN_NULL();  // Or return empty array: PG_RETURN_ARRAYTYPE_P(construct_empty_array(INT4OID))
+        PG_RETURN_NULL();
 
     /* Get matches */
     result = ac_match(entry->automaton->root, text_str);
@@ -521,19 +532,24 @@ Datum ac_rank_simple(PG_FUNCTION_ARGS)
     char *text_str;
     ac_match_result result;
     float4 score;
+
     /* Look for the automaton */ 
     entry = hash_search(automaton_storage, &id, HASH_FIND, &found);
+
     /* If not found, return false */ 
     if (!found)
-        PG_RETURN_FLOAT4(0.0);
+        PG_RETURN_NULL();
+
     /* Else, evaluate */ 
     text_str = text_to_cstring(input);
     result = ac_match(entry->automaton->root, text_str);
     score = (float)result.num_matches / entry->automaton->num_lexemes;
+
     /* Clean up */
     pfree(result.matches);
     pfree(result.counts);
     pfree(text_str);
+
     /* Return score */
     PG_RETURN_FLOAT4(score);
 }
