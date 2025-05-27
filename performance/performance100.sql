@@ -40,9 +40,17 @@ EXPLAIN ANALYZE SELECT * FROM test_table3
 WHERE tsv @@ 'cat';
 /* pg_ac */
 SELECT * FROM test_table4
-WHERE ac_search(1, to_tsquery('english', 'cat'));
+WHERE ac_search(hid, 'cat');
 EXPLAIN ANALYZE SELECT * FROM test_table4
-WHERE ac_search(1, to_tsquery('english', 'cat'));
+WHERE ac_search(hid, 'cat');
+SELECT * FROM test_table4
+WHERE ac_match(hid, 'cat') IS NOT NULL;
+EXPLAIN ANALYZE SELECT * FROM test_table4
+WHERE ac_match(hid, 'cat') IS NOT NULL;
+SELECT * FROM test_table4
+WHERE ac_rank_simple(hid, 'cat') > 0;
+EXPLAIN ANALYZE SELECT * FROM test_table4
+WHERE ac_rank_simple(hid, 'cat') > 0;
 /* Test 100 words performance */
 /* PostgreSQL Full Text Search */
 SELECT * FROM test_table3

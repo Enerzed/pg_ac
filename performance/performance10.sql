@@ -23,7 +23,7 @@ INSERT INTO test_table2 (hid)
 SELECT
 ac_build(to_tsvector('english',
 'Golden leaves rustle crimson sunset ignites dark valleys stars shimmer'))
-FROM generate_series(1, 10000);
+FROM generate_series(1, 10000 );
 /* Test 10 words performance */
 /* PostgreSQL Full Text Search */
 SELECT * FROM test_table1
@@ -35,6 +35,14 @@ SELECT * FROM test_table2
 WHERE ac_search(hid, 'cat');
 EXPLAIN ANALYZE SELECT * FROM test_table2
 WHERE ac_search(hid, 'cat');
+SELECT * FROM test_table2
+WHERE ac_match(hid, 'cat') IS NOT NULL;
+EXPLAIN ANALYZE SELECT * FROM test_table2
+WHERE ac_match(hid, 'cat') IS NOT NULL;
+SELECT * FROM test_table2
+WHERE ac_rank_simple(hid, 'cat') > 0;
+EXPLAIN ANALYZE SELECT * FROM test_table2
+WHERE ac_rank_simple(hid, 'cat') > 0;
 /* Test 10 words performance */
 /* PostgreSQL Full Text Search */
 SELECT * FROM test_table1

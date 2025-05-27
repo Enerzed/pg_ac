@@ -26,7 +26,6 @@ RETURNS boolean
 AS 'pg_ac', 'ac_destroy'
 LANGUAGE C STRICT;
 
-
 CREATE OR REPLACE FUNCTION ac_search(bigint, tsquery)
 RETURNS boolean
 AS 'pg_ac', 'ac_search_tsquery'
@@ -37,7 +36,7 @@ RETURNS boolean
 AS 'pg_ac', 'ac_search_text'
 LANGUAGE C STRICT;
 
-CREATE OR REPLACE FUNCTION ac_match_text(integer, text)
+CREATE OR REPLACE FUNCTION ac_match(integer, text)
 RETURNS integer[]
 AS 'pg_ac', 'ac_match_text'
 LANGUAGE C STRICT;

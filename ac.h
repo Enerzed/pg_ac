@@ -107,6 +107,7 @@ static int64 next_automaton_id = 1;
 /* 
  * Init and fini 
  */
+
 void _PG_init(void);
 void _PG_fini(void);
 
