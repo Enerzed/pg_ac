@@ -104,7 +104,9 @@ static HTAB *automaton_storage = NULL;
 static int64 next_automaton_id = 1;
 
 
-/* Init and fini */
+/* 
+ * Init and fini 
+ */
 void _PG_init(void);
 void _PG_fini(void);
 
@@ -112,8 +114,9 @@ void _PG_fini(void);
 /*
  * Memory management 
  */
-static void init_automaton_storage();
-static void cleanup_automaton();
+
+static void _ac_init();
+static void _ac_fini();
 void ac_free_trie(ac_state* current);
 
 
@@ -161,6 +164,7 @@ Datum ac_rank_simple(PG_FUNCTION_ARGS);
 /*
  * PostgreSQL initialize functions 
 */
+
 PG_FUNCTION_INFO_V1(ac_init);
 PG_FUNCTION_INFO_V1(ac_fini);
 PG_FUNCTION_INFO_V1(ac_build_tsvector);
