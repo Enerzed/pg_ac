@@ -23,7 +23,7 @@ INSERT INTO test_table2 (hid)
 SELECT
 ac_build(to_tsvector('english',
 'Golden leaves rustle crimson sunset ignites dark valleys stars shimmer'))
-FROM generate_series(1, 10000 );
+FROM generate_series(1, 10000);
 /* Test 10 words performance */
 /* PostgreSQL Full Text Search */
 SELECT * FROM test_table1

@@ -200054,7 +200054,6 @@ SELECT * FROM test_table10
 WHERE ac_search(hid, to_tsquery('english', 'cat & dog | snake'));
 EXPLAIN ANALYZE SELECT * FROM test_table10
 WHERE ac_search(hid, to_tsquery('english', 'cat & dog | snake'));
-SELECT * FROM test_table10
 /* Clean up */
 SELECT ac_fini();
 DROP TABLE test_table9 CASCADE;

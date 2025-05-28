@@ -39,6 +39,12 @@ SELECT ac_build(to_tsvector('english', 'Quick brown fox jumps over the lazy dog'
         5
 (1 row)
 
+SELECT ac_build(ARRAY['quick', 'brown', 'fox', 'jumps', 'over', 'the', 'lazy', 'dog']);
+ ac_build 
+----------
+        6
+(1 row)
+
 /* Test first automaton */
 SELECT ac_search(1, to_tsquery('english', 'dog & cat'));                        -- Should be true
  ac_search 
@@ -138,10 +144,16 @@ SELECT ac_rank_simple(5,'pink horse');                                          
 (1 row)
 
 /* Matches for fifth and sixth automaton, index structure is the same as corresponding TSVector indexes */
-SELECT ac_match_text(5, 'quick quick jump dog fox');                            -- Should be 1,1,4,8,3
- ac_match_text 
----------------
+SELECT ac_match(5, 'quick quick jump dog fox');                            -- Should be 1,1,4,8,3
+  ac_match   
+-------------
  {1,1,4,8,3}
+(1 row)
+
+SELECT ac_match(6, 'quick quick jump dog fox');                            -- Should be 1,1,8,3
+ ac_match  
+-----------
+ {1,1,8,3}
 (1 row)
 
 /* Clean up */

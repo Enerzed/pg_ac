@@ -130,8 +130,8 @@ void ac_add_keyword(ac_state* root, const char* keyword, const int index)
 }
 
 
-/* Builds failure and dictionary links */ 
-void ac_build_links(ac_state* root)
+/* Builds failure links */ 
+void ac_build_failure_links(ac_state* root)
 {
 	int queue_capacity= 16;
 	int queue_size = 0;
@@ -154,11 +154,7 @@ void ac_build_links(ac_state* root)
                 while(fail && !fail->children[i])
 					fail = fail->fail_link;
 				if (fail)
-				{
-                    if (fail->is_final)
-                        child->dictionary_link = fail->children[i];
 					child->fail_link = fail->children[i];
-				}
 				else 
 					child->fail_link = root;
 			}
@@ -175,6 +171,62 @@ void ac_build_links(ac_state* root)
 		}
 	}
 	pfree(queue);
+}
+
+
+/* Builds dictionary links */
+void ac_build_dictionary_links(ac_state* root)
+{
+    int queue_capacity = 16;
+    int queue_size = 0;
+    ac_state** queue = (ac_state**)palloc(queue_capacity * sizeof(ac_state*));
+    int front = 0, rear = 0;
+
+    for (int i = 0; i < MAX_CHILDREN; i++) 
+	{
+        if (root->children[i]) 
+        {
+            if (queue_size == queue_capacity) 
+			{
+                queue_capacity *= 2;
+                queue = (ac_state**)repalloc(queue, queue_capacity * sizeof(ac_state*));
+            }
+            queue[rear++] = root->children[i];
+            queue_size++;
+        }
+    }
+
+    while (front < rear) 
+	{
+        ac_state* current = queue[front++];
+        ac_state* fail = current->fail_link;
+        if (fail && fail->is_final)
+		{
+            current->dictionary_link = current->fail_link;
+        } 
+		else if (current->fail_link && fail->dictionary_link)
+		{
+            current->dictionary_link = fail->dictionary_link;
+        } 
+		else
+		{
+            current->dictionary_link = NULL;
+        }
+        for (int i = 0; i < MAX_CHILDREN; i++) 
+		{
+            if (current->children[i]) 
+            {
+                if (queue_size == queue_capacity) 
+				{
+                    queue_capacity *= 2;
+                    queue = (ac_state**)repalloc(queue, queue_capacity * sizeof(ac_state*));
+                }
+                queue[rear++] = current->children[i];
+                queue_size++;
+            }
+        }
+    }
+    pfree(queue);
 }
 
 
@@ -342,7 +394,8 @@ Datum ac_build_tsvector(PG_FUNCTION_ARGS)
         pfree(lexeme);
     }
 
-    ac_build_links(automaton->root);
+    ac_build_failure_links(automaton->root);
+    ac_build_dictionary_links(automaton->root);
 
     /* Store automaton */
     id = next_automaton_id++;
@@ -389,7 +442,8 @@ Datum ac_build_array(PG_FUNCTION_ARGS)
         pfree(lexeme);
     }
 
-    ac_build_links(automaton->root);
+    ac_build_failure_links(automaton->root);
+    ac_build_dictionary_links(automaton->root);
 
     /* Store automaton */
     id = next_automaton_id++;

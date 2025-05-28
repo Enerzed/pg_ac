@@ -130,7 +130,8 @@ ac_state* ac_create_state();
 /* Add keyword to the trie */
 void ac_add_keyword(ac_state* root, const char* keyword, const int index);
 /* Build failure and dictionary links */
-void ac_build_links(ac_state* root);
+void ac_build_failure_links(ac_state* root);
+void ac_build_dictionary_links(ac_state* root);
 /* Match indices */
 ac_match_result ac_match(ac_state* root, char* text);
 /* Look if the word is in the trie */
