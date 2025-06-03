@@ -20043,14 +20043,26 @@ WHERE ac_rank_simple(hid, 'cat') > 0;
 /* Test 10000 words performance */
 /* PostgreSQL Full Text Search */
 SELECT * FROM test_table7
-WHERE tsv @@ to_tsquery('english', 'cat & dog | snake');
+WHERE tsv @@ to_tsquery('english', 'cat | dog | snake');
 EXPLAIN ANALYZE SELECT * FROM test_table7
-WHERE tsv @@ to_tsquery('english', 'cat & dog | snake');
+WHERE tsv @@ to_tsquery('english', 'cat | dog | snake');
 /* pg_ac */
 SELECT * FROM test_table8
-WHERE ac_search(hid, to_tsquery('english', 'cat & dog | snake'));
+WHERE ac_search(hid, to_tsquery('english', 'cat | dog | snake'));
 EXPLAIN ANALYZE SELECT * FROM test_table8
-WHERE ac_search(hid, to_tsquery('english', 'cat & dog | snake'));
+WHERE ac_search(hid, to_tsquery('english', 'cat | dog | snake'));
+SELECT * FROM test_table8
+WHERE ac_search(hid, 'cat dog snake');
+EXPLAIN ANALYZE SELECT * FROM test_table8
+WHERE ac_search(hid, 'cat dog snake');
+SELECT * FROM test_table8
+WHERE ac_match(hid, 'cat dog snake') IS NOT NULL;
+EXPLAIN ANALYZE SELECT * FROM test_table8
+WHERE ac_match(hid, 'cat dog snake') IS NOT NULL;
+SELECT * FROM test_table8
+WHERE ac_rank_simple(hid, 'cat dog snake') > 0;
+EXPLAIN ANALYZE SELECT * FROM test_table8
+WHERE ac_rank_simple(hid, 'cat dog snake') > 0;
 /* Clean up */
 SELECT ac_fini();
 DROP TABLE test_table7 CASCADE;

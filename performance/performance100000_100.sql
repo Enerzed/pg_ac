@@ -200027,45 +200027,135 @@ FROM generate_series(1, 1);
 /* Test 10 words performance */
 /* PostgreSQL Full Text Search */
 SELECT * FROM test_table9
-WHERE tsv @@ 'cat';
+WHERE tsv @@ 'Bababadalgharaghtakamminapronnkonnbronntonnepronntuonnthunntrovarrhounawnskawntoohoohoordeenenthurnuk';
 EXPLAIN ANALYZE SELECT * FROM test_table9
-WHERE tsv @@ 'cat';
+WHERE tsv @@ 'Bababadalgharaghtakamminapronnkonnbronntonnepronntuonnthunntrovarrhounawnskawntoohoohoordeenenthurnuk';
 /* pg_ac */
 SELECT * FROM test_table10
-WHERE ac_search(hid, 'cat');
+WHERE ac_search(hid, 'Bababadalgharaghtakamminapronnkonnbronntonnepronntuonnthunntrovarrhounawnskawntoohoohoordeenenthurnuk');
 EXPLAIN ANALYZE SELECT * FROM test_table10
-WHERE ac_search(hid, 'cat');
+WHERE ac_search(hid, 'Bababadalgharaghtakamminapronnkonnbronntonnepronntuonnthunntrovarrhounawnskawntoohoohoordeenenthurnuk');
 SELECT * FROM test_table10
-WHERE ac_match(hid, 'cat') IS NOT NULL;
+WHERE ac_match(hid, 'Bababadalgharaghtakamminapronnkonnbronntonnepronntuonnthunntrovarrhounawnskawntoohoohoordeenenthurnuk') IS NOT NULL;
 EXPLAIN ANALYZE SELECT * FROM test_table10
-WHERE ac_match(hid, 'cat') IS NOT NULL;
+WHERE ac_match(hid, 'Bababadalgharaghtakamminapronnkonnbronntonnepronntuonnthunntrovarrhounawnskawntoohoohoordeenenthurnuk') IS NOT NULL;
 SELECT * FROM test_table10
-WHERE ac_rank_simple(hid, 'cat') > 0;
+WHERE ac_rank_simple(hid, 'Bababadalgharaghtakamminapronnkonnbronntonnepronntuonnthunntrovarrhounawnskawntoohoohoordeenenthurnuk') > 0;
 EXPLAIN ANALYZE SELECT * FROM test_table10
-WHERE ac_rank_simple(hid, 'cat') > 0;
+WHERE ac_rank_simple(hid, 'Bababadalgharaghtakamminapronnkonnbronntonnepronntuonnthunntrovarrhounawnskawntoohoohoordeenenthurnuk') > 0;
 /* Test 10 words performance */
 /* PostgreSQL Full Text Search */
 SELECT * FROM test_table9
-WHERE tsv @@ to_tsquery('english', 'cat | dog | snake');
+WHERE tsv @@ to_tsquery('english', 'cat | dog | snake | zebra | fish | bird | monkey | elephant | giraffe | horse |
+                                    lion | tiger | pony | salmon | dolphin | penguin | whale | hippopotamus | unicorn | spider |
+                                    scorpion | octopus | squid | starfish | jellyfish | deer | rhino | mouse | rat | squirrel |
+                                    pig | hamster | ferret | gorilla | koala | ape | chimpanzee | orangutan | bear | wolf |
+                                    fox | cow | sheep | goat | moose | platypus | otter | beaver | rabbit | hedgehod |
+                                    bat | seal | walrus | eagle | hawk | owl | parrot | crow | sparrow | hummingbird |
+                                    flamingo | pelican | ostrich | emu | crocodile | alligator | lizard | gecko | chamelion |turtle |
+                                    tortoise | frog | toad | salamander | newt | shark | ray | clownfish | tuna | goldfish |
+                                    eel | seahorse | crab | lobster | shrimp | butterfly | moth | bee | ant | beetle |
+                                    dragonfly | grasshoper | cricket | fly | mosquito | centipede | millipede | snail | slug | earthworm');
 EXPLAIN ANALYZE SELECT * FROM test_table9
-WHERE tsv @@ to_tsquery('english', 'cat | dog | snake');
+WHERE tsv @@ to_tsquery('english', 'cat | dog | snake | zebra | fish | bird | monkey | elephant | giraffe | horse |
+                                    lion | tiger | pony | salmon | dolphin | penguin | whale | hippopotamus | unicorn | spider |
+                                    scorpion | octopus | squid | starfish | jellyfish | deer | rhino | mouse | rat | squirrel |
+                                    pig | hamster | ferret | gorilla | koala | ape | chimpanzee | orangutan | bear | wolf |
+                                    fox | cow | sheep | goat | moose | platypus | otter | beaver | rabbit | hedgehod |
+                                    bat | seal | walrus | eagle | hawk | owl | parrot | crow | sparrow | hummingbird |
+                                    flamingo | pelican | ostrich | emu | crocodile | alligator | lizard | gecko | chamelion |turtle |
+                                    tortoise | frog | toad | salamander | newt | shark | ray | clownfish | tuna | goldfish |
+                                    eel | seahorse | crab | lobster | shrimp | butterfly | moth | bee | ant | beetle |
+                                    dragonfly | grasshoper | cricket | fly | mosquito | centipede | millipede | snail | slug | earthworm');
 /* pg_ac */
 SELECT * FROM test_table10
-WHERE ac_search(hid, to_tsquery('english', 'cat | dog | snake'));
+WHERE ac_search(hid, to_tsquery('english', 'cat | dog | snake | zebra | fish | bird | monkey | elephant | giraffe | horse |
+                                    lion | tiger | pony | salmon | dolphin | penguin | whale | hippopotamus | unicorn | spider |
+                                    scorpion | octopus | squid | starfish | jellyfish | deer | rhino | mouse | rat | squirrel |
+                                    pig | hamster | ferret | gorilla | koala | ape | chimpanzee | orangutan | bear | wolf |
+                                    fox | cow | sheep | goat | moose | platypus | otter | beaver | rabbit | hedgehod |
+                                    bat | seal | walrus | eagle | hawk | owl | parrot | crow | sparrow | hummingbird |
+                                    flamingo | pelican | ostrich | emu | crocodile | alligator | lizard | gecko | chamelion |turtle |
+                                    tortoise | frog | toad | salamander | newt | shark | ray | clownfish | tuna | goldfish |
+                                    eel | seahorse | crab | lobster | shrimp | butterfly | moth | bee | ant | beetle |
+                                    dragonfly | grasshoper | cricket | fly | mosquito | centipede | millipede | snail | slug | earthworm'));
 EXPLAIN ANALYZE SELECT * FROM test_table10
-WHERE ac_search(hid, to_tsquery('english', 'cat | dog | snake'));
+WHERE ac_search(hid, to_tsquery('english', 'cat | dog | snake | zebra | fish | bird | monkey | elephant | giraffe | horse |
+                                    lion | tiger | pony | salmon | dolphin | penguin | whale | hippopotamus | unicorn | spider |
+                                    scorpion | octopus | squid | starfish | jellyfish | deer | rhino | mouse | rat | squirrel |
+                                    pig | hamster | ferret | gorilla | koala | ape | chimpanzee | orangutan | bear | wolf |
+                                    fox | cow | sheep | goat | moose | platypus | otter | beaver | rabbit | hedgehod |
+                                    bat | seal | walrus | eagle | hawk | owl | parrot | crow | sparrow | hummingbird |
+                                    flamingo | pelican | ostrich | emu | crocodile | alligator | lizard | gecko | chamelion |turtle |
+                                    tortoise | frog | toad | salamander | newt | shark | ray | clownfish | tuna | goldfish |
+                                    eel | seahorse | crab | lobster | shrimp | butterfly | moth | bee | ant | beetle |
+                                    dragonfly | grasshoper | cricket | fly | mosquito | centipede | millipede | snail | slug | earthworm'));
 SELECT * FROM test_table10
-WHERE ac_search(hid, 'cat dog snake');
+WHERE ac_search(hid,        'cat dog snake zebra fish bird monkey elephant giraffe horse 
+                            lion tiger pony salmon dolphin penguin whale hippopotamus unicorn spider
+                            scorpion octopus squid starfish jellyfish deer rhino mouse rat squirrel
+                            pig hamster ferret gorilla koala ape chimpanzee orangutan bear wolf 
+                            fox cow sheep goat moose platypus otter beaver rabbit hedgehod 
+                            bat seal walrus eagle hawk owl parrot crow sparrow hummingbird
+                            flamingo pelican ostrich emu crocodile alligator lizard gecko chamelion turtle
+                            tortoise frog toad salamander newt shark ray clownfish tuna goldfish eel
+                            seahorse crab lobster shrimp butterfly moth bee ant beetle dragonfly
+                            grasshoper cricket fly mosquito centipede millipede snail slug earthworm');
 EXPLAIN ANALYZE SELECT * FROM test_table10
-WHERE ac_search(hid, 'cat dog snake');
+WHERE ac_search(hid,        'cat dog snake zebra fish bird monkey elephant giraffe horse 
+                            lion tiger pony salmon dolphin penguin whale hippopotamus unicorn spider
+                            scorpion octopus squid starfish jellyfish deer rhino mouse rat squirrel
+                            pig hamster ferret gorilla koala ape chimpanzee orangutan bear wolf 
+                            fox cow sheep goat moose platypus otter beaver rabbit hedgehod 
+                            bat seal walrus eagle hawk owl parrot crow sparrow hummingbird
+                            flamingo pelican ostrich emu crocodile alligator lizard gecko chamelion turtle
+                            tortoise frog toad salamander newt shark ray clownfish tuna goldfish eel
+                            seahorse crab lobster shrimp butterfly moth bee ant beetle dragonfly
+                            grasshoper cricket fly mosquito centipede millipede snail slug earthworm');
 SELECT * FROM test_table10
-WHERE ac_match(hid, 'cat dog snake') IS NOT NULL;
+WHERE ac_match(hid,         'cat dog snake zebra fish bird monkey elephant giraffe horse 
+                            lion tiger pony salmon dolphin penguin whale hippopotamus unicorn spider
+                            scorpion octopus squid starfish jellyfish deer rhino mouse rat squirrel
+                            pig hamster ferret gorilla koala ape chimpanzee orangutan bear wolf 
+                            fox cow sheep goat moose platypus otter beaver rabbit hedgehod 
+                            bat seal walrus eagle hawk owl parrot crow sparrow hummingbird
+                            flamingo pelican ostrich emu crocodile alligator lizard gecko chamelion turtle
+                            tortoise frog toad salamander newt shark ray clownfish tuna goldfish eel
+                            seahorse crab lobster shrimp butterfly moth bee ant beetle dragonfly
+                            grasshoper cricket fly mosquito centipede millipede snail slug earthworm') IS NOT NULL;
 EXPLAIN ANALYZE SELECT * FROM test_table10
-WHERE ac_match(hid, 'cat dog snake') IS NOT NULL;
+WHERE ac_match(hid,         'cat dog snake zebra fish bird monkey elephant giraffe horse 
+                            lion tiger pony salmon dolphin penguin whale hippopotamus unicorn spider
+                            scorpion octopus squid starfish jellyfish deer rhino mouse rat squirrel
+                            pig hamster ferret gorilla koala ape chimpanzee orangutan bear wolf 
+                            fox cow sheep goat moose platypus otter beaver rabbit hedgehod 
+                            bat seal walrus eagle hawk owl parrot crow sparrow hummingbird
+                            flamingo pelican ostrich emu crocodile alligator lizard gecko chamelion turtle
+                            tortoise frog toad salamander newt shark ray clownfish tuna goldfish eel
+                            seahorse crab lobster shrimp butterfly moth bee ant beetle dragonfly
+                            grasshoper cricket fly mosquito centipede millipede snail slug earthworm')  IS NOT NULL;
 SELECT * FROM test_table10
-WHERE ac_rank_simple(hid, 'cat dog snake') > 0;
+WHERE ac_rank_simple(hid,   'cat dog snake zebra fish bird monkey elephant giraffe horse 
+                            lion tiger pony salmon dolphin penguin whale hippopotamus unicorn spider
+                            scorpion octopus squid starfish jellyfish deer rhino mouse rat squirrel
+                            pig hamster ferret gorilla koala ape chimpanzee orangutan bear wolf 
+                            fox cow sheep goat moose platypus otter beaver rabbit hedgehod 
+                            bat seal walrus eagle hawk owl parrot crow sparrow hummingbird
+                            flamingo pelican ostrich emu crocodile alligator lizard gecko chamelion turtle
+                            tortoise frog toad salamander newt shark ray clownfish tuna goldfish eel
+                            seahorse crab lobster shrimp butterfly moth bee ant beetle dragonfly
+                            grasshoper cricket fly mosquito centipede millipede snail slug earthworm') > 0;
 EXPLAIN ANALYZE SELECT * FROM test_table10
-WHERE ac_rank_simple(hid, 'cat dog snake') > 0;
+WHERE ac_rank_simple(hid,   'cat dog snake zebra fish bird monkey elephant giraffe horse 
+                            lion tiger pony salmon dolphin penguin whale hippopotamus unicorn spider
+                            scorpion octopus squid starfish jellyfish deer rhino mouse rat squirrel
+                            pig hamster ferret gorilla koala ape chimpanzee orangutan bear wolf 
+                            fox cow sheep goat moose platypus otter beaver rabbit hedgehod 
+                            bat seal walrus eagle hawk owl parrot crow sparrow hummingbird
+                            flamingo pelican ostrich emu crocodile alligator lizard gecko chamelion turtle
+                            tortoise frog toad salamander newt shark ray clownfish tuna goldfish eel
+                            seahorse crab lobster shrimp butterfly moth bee ant beetle dragonfly
+                            grasshoper cricket fly mosquito centipede millipede snail slug earthworm') > 0;
 /* Clean up */
 SELECT ac_fini();
 DROP TABLE test_table9 CASCADE;
