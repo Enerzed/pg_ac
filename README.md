@@ -1,4 +1,4 @@
-**Aho-Corasick algorithm for full text search in PostgreSQL**
+_**Aho-Corasick algorithm for full text search in PostgreSQL**_
 
 
 First after installing the extension create it in your database:
@@ -13,7 +13,7 @@ After that you may start creating automatons and using the search functions.
 
 
 
-Build functions return an automaton id for use in the search functions
+_**Build functions return an automaton id for use in the search functions:**_
 1. Build function ac_build(tsvector):
    SELECT ac_build(to_tsvector('Quick brown fox jumps over the lazy dog'));
    
@@ -24,7 +24,7 @@ Results of these functions are different, look how PostgreSQL FTS uses dictionar
 
 
 
-Search functions
+_**Search functions:**_
 1. Search function ac_search(id, text) immediately returns TRUE if found at least 1 word
    SELECT ac_search(1, 'Text where we look for at least one word from the automaton');
    
