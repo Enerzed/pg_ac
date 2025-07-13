@@ -2,7 +2,7 @@ _**Aho-Corasick algorithm for full text search in PostgreSQL**_
 
 
 First after installing the extension create it in your database:
-'''sql
+'''tsql
   CREATE EXTENSION pg_ac;
 '''
 
