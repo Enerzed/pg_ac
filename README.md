@@ -2,9 +2,9 @@ _**Aho-Corasick algorithm for full text search in PostgreSQL**_
 
 
 First after installing the extension create it in your database:
-
+'''sql
   CREATE EXTENSION pg_ac;
-
+'''
 
   
 Then initialize the hash-table for automatons with:
