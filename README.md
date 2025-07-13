@@ -39,7 +39,7 @@ _**Search functions:**_
    
 2. Search function ac_search(id, tsquery) looks for a word in each word in the TSQuery and aplies the logical operators
 
-       SELECT ac_search(1, to_query('!Text & where | we & !(look)'));
+       SELECT ac_search(1, to_tsquery('!Text & where | we & !(look)'));
    
 3. Match function ac_match(id, text) returns indices of all occurances in a text
 
