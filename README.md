@@ -37,7 +37,7 @@ _**Search functions:**_
 
        SELECT ac_search(1, 'Text where we look for at least one word from the automaton');
    
-2. Search function ac_search(id, tsquery) looks for a word in each word in the TSQuery and aplies the logical operators
+2. Search function ac_search(id, tsquery) looks for a word from an automaton in each word in the TSQuery and aplies the logical operators
 
        SELECT ac_search(1, to_tsquery('!Text & where | we & !(look)'));
    
@@ -55,6 +55,6 @@ If you want to delete an automaton you can use ac_destroy(id) function
 
     SELECT ac_destroy(1);
 
-If you want to delete all the automatons you can use ac_fini() function
+If you want to delete all your automatons you can use ac_fini() function
 
     SELECT ac_fini();
