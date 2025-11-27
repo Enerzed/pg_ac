@@ -1,4 +1,4 @@
-_**Aho-Corasick algorithm for full text search in PostgreSQL**_
+_**Aho-Corasick algorithm for full text search (FTS) in PostgreSQL**_
 
 
 First after installing the extension create it in your database:
@@ -28,7 +28,7 @@ _**Build functions return an automaton id for use in the search functions:**_
 
 
    
-Results of these functions are different, look how PostgreSQL FTS uses dictionaries and word normalizationg
+Results of these functions are different, look how PostgreSQL FTS uses dictionaries and word normalization
 
 
 
