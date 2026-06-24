@@ -35,7 +35,7 @@ void _PG_fini(void)
 
 
 /* Init automaton storage */ 
-static void _ac_init() 
+static void _ac_init(void) 
 {
     HASHCTL ctl;
     memset(&ctl, 0, sizeof(ctl));
@@ -48,7 +48,7 @@ static void _ac_init()
 
 
 /* Cleanup automatons */ 
-static void _ac_fini() 
+static void _ac_fini(void) 
 {
     HASH_SEQ_STATUS status;
     ac_automaton_entry *entry;
@@ -100,7 +100,7 @@ void ac_free_trie(ac_state* current)
 
 
 /* Creates a new Aho Corasick state */
-ac_state* ac_create_state()
+ac_state* ac_create_state(void)
 {
     /* Allocate and initialize a new state */
 	ac_state* state = (ac_state*)palloc0(sizeof(ac_state)); 
@@ -239,7 +239,7 @@ ac_match_result ac_match(ac_state* root, char* text)
     int *counts = palloc(16 * sizeof(int));
     int capacity = 16;
     
-    for (int i = 0; i < text[i] != '\0'; i++) 
+    for (int i = 0; text[i] != '\0'; i++) 
     {	
         unsigned char c = (unsigned char)text[i];
         while (current && !current->children[c])
@@ -299,7 +299,7 @@ bool ac_contains(ac_state *root, const char *text)
 
 
 /* Helper function for ac_search (recursive) */
-bool evaluate_query(QueryItem *item, TSQuery *tsq, ac_automaton *automaton) 
+bool evaluate_query(QueryItem *item, TSQuery tsq, ac_automaton *automaton) 
 {
     /* If the item is a value */ 
     if (item->type == QI_VAL)            
@@ -482,8 +482,8 @@ Datum ac_destroy(PG_FUNCTION_ARGS)
 /* Search in Aho Corasick automaton using TSQuery */
 Datum ac_search_tsquery(PG_FUNCTION_ARGS) 
 {
-    int64 id = PG_GETARG_INT64(0);;
-    TSQuery tsq = PG_GETARG_TSQUERY(1);;
+    int64 id = PG_GETARG_INT64(0);
+    TSQuery tsq = PG_GETARG_TSQUERY(1);
     bool found;
     ac_automaton_entry *entry;
     QueryItem *items;

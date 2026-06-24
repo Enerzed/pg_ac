@@ -50,7 +50,7 @@ PG_MODULE_MAGIC;
 
 
 /* Aho Corasick trie node */
-typedef struct
+typedef struct ac_state
 {
 	/* Children of the node */
 	struct ac_state* children[MAX_CHILDREN];
@@ -116,8 +116,8 @@ void _PG_fini(void);
  * Memory management 
  */
 
-static void _ac_init();
-static void _ac_fini();
+static void _ac_init(void);
+static void _ac_fini(void);
 void ac_free_trie(ac_state* current);
 
 
@@ -126,7 +126,7 @@ void ac_free_trie(ac_state* current);
  */
 
 /* Create and initialize Aho Corasick state */
-ac_state* ac_create_state();
+ac_state* ac_create_state(void);
 /* Add keyword to the trie */
 void ac_add_keyword(ac_state* root, const char* keyword, const int index);
 /* Build failure and dictionary links */
@@ -137,7 +137,7 @@ ac_match_result ac_match(ac_state* root, char* text);
 /* Look if the word is in the trie */
 bool ac_contains(ac_state *root, const char *text);
 /* Evaluate query (recursive)*/
-bool evaluate_query(QueryItem *item, TSQuery *tsq, ac_automaton *automaton);
+bool evaluate_query(QueryItem *item, TSQuery tsq, ac_automaton *automaton);
 
 
 /* 
