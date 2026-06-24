@@ -32,6 +32,7 @@
 #include "nodes/parsenodes.h"
 #include "common/hashfn.h"
 #include "libpq/pqformat.h"
+#include "mb/pg_wchar.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -42,60 +43,56 @@
 #include <funcapi.h>
 
 
-#define MAX_CHILDREN 256
 #define MAX_LEXEME_SIZE 256
 #define INITIAL_NELEM 256
 
 PG_MODULE_MAGIC;
 
 
+/* Edge - Unicode character and pointer to child */
+typedef struct ac_edge
+{
+	int ch;									/* Unicode character */
+	struct ac_state *child;					/* Pointer to child */
+} ac_edge;
+
+
 /* Aho Corasick trie node */
 typedef struct ac_state
 {
-	/* Children of the node */
-	struct ac_state* children[MAX_CHILDREN];
-	/* Failure link traverses to the link that has the longest common prefix */
-	struct ac_state* fail_link;
-	/* Dictionary link traverses to the link that is also need to be considered */
-	struct ac_state* dictionary_link;
-	/* Index of the lexeme */
-	int index;
-	/* Depth of the node */
-	int depth;
-	/* Is the node contains a lexeme */
-	bool is_final;
+	ac_edge *edges;							/* Dynamic edges array */
+	int edge_count;							/* Number of edges */
+	int edge_capacity;						/* Current edges capacity */
+	struct ac_state* fail_link;				/* Failure link traverses to the link that has the longest common prefix */
+	struct ac_state* dictionary_link;		/* Dictionary link traverses to the link that is also need to be considered */
+	int index;								/* Index of current lexeme */
+	int depth;								/* Depth of the node */
+	bool is_final;							/* Does the node contain a lexeme? */
 } ac_state;
 
 
 /* Aho Corasick Automaton */
-typedef struct 
+typedef struct ac_automaton
 {
-	/* Trie */
-	ac_state *root;
-	/* Total number of lexemes */
-    int num_lexemes;
+	ac_state *root;							/* Trie */
+    int num_lexemes;						/* Total number of lexemes */
 } ac_automaton;
 
 
 /* Aho Corasick automaton entry for storage */
-typedef struct
+typedef struct ac_automaton_entry
 {
-	/* Automaton id */
-	int64 id;
-	/* Automaton */
-	ac_automaton *automaton;
+	int64 id;								/* Automaton id */
+	ac_automaton *automaton;				/* Automaton */
 } ac_automaton_entry;
 
 
 /* Useful for ranking only */
-typedef struct 
+typedef struct ac_match_result
 {
-	/* Match indices */
-    int *matches;
-	/* Number of matches for each match index, stored as 1 for each match */
-    int *counts;
-	/* Total number of matches */
-    int num_matches;
+    int *matches;							/* Match indices */
+    int *counts;							/* Number of matches for each match index, stored as 1 for each match */
+    int num_matches;						/* Total number of matches */
 } ac_match_result;
 
 

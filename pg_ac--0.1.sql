@@ -36,7 +36,7 @@ RETURNS boolean
 AS 'pg_ac', 'ac_search_text'
 LANGUAGE C STRICT;
 
-CREATE OR REPLACE FUNCTION ac_match(integer, text)
+CREATE OR REPLACE FUNCTION ac_match(bigint, text)
 RETURNS integer[]
 AS 'pg_ac', 'ac_match_text'
 LANGUAGE C STRICT;

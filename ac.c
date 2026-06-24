@@ -2,7 +2,6 @@
  * ac.c
  */
 
-
 #include "ac.h"
 
 
@@ -10,22 +9,17 @@
  * Init and fini
  */
 
-
-/* Init automaton storage */ 
-void _PG_init(void) 
+/* Init automaton storage */
+void _PG_init(void)
 {
-    /* Init automaton storage is currently not called on extension load until _PG_fini actually works
-     * ac_init();
-     */
+    /* Not called automatically – use ac_init() explicitly */
 }
 
 
-/* Finalize */ 
+/* Finalize */
 void _PG_fini(void)
 {
-    /* Fini automaton storage is currently not called on extension load until _PG_fini actually works
-     * ac_init();
-     */
+    /* Not called automatically – use ac_fini() explicitly */
 }
 
 
@@ -33,22 +27,20 @@ void _PG_fini(void)
  * Memory management
  */
 
-
-/* Init automaton storage */ 
-static void _ac_init(void) 
+/* Init automaton storage */
+static void _ac_init(void)
 {
     HASHCTL ctl;
     memset(&ctl, 0, sizeof(ctl));
     ctl.keysize = sizeof(int64);
     ctl.entrysize = sizeof(ac_automaton_entry);
-    /* Use TopMemoryContext for global storage */
-    ctl.hcxt = TopMemoryContext; 
+    ctl.hcxt = TopMemoryContext;
     automaton_storage = hash_create("automaton storage", INITIAL_NELEM, &ctl, HASH_ELEM | HASH_CONTEXT);
 }
 
 
-/* Cleanup automatons */ 
-static void _ac_fini(void) 
+/* Cleanup automatons */
+static void _ac_fini(void)
 {
     HASH_SEQ_STATUS status;
     ac_automaton_entry *entry;
@@ -58,39 +50,31 @@ static void _ac_fini(void)
 
     hash_seq_init(&status, automaton_storage);
 
-    /*  Iterate through all entries and free associated automaton */
     while ((entry = (ac_automaton_entry *) hash_seq_search(&status)) != NULL)
     {
         ac_automaton *automaton = entry->automaton;
-        if (automaton) 
+        if (automaton)
         {
-            /* Free the trie, TSVector, and automaton struct */
             ac_free_trie(automaton->root);
             pfree(automaton);
         }
     }
 
-    /* Destroy the hash table after all entries are processed */
     hash_destroy(automaton_storage);
     automaton_storage = NULL;
 }
 
 
-/* Free trie */
+/* Free trie recursively */
 void ac_free_trie(ac_state* current)
 {
-	if (current == NULL)
-	{
-		return;
-	}
-	for (int i = 0; i < MAX_CHILDREN; i++)
-	{
-		if (current->children[i] != NULL)
-		{
-			ac_free_trie(current->children[i]);
-		}
-	}
-	pfree(current);
+    if (current == NULL)
+        return;
+    for (int i = 0; i < current->edge_count; i++)
+        ac_free_trie(current->edges[i].child);
+    if (current->edges)
+        pfree(current->edges);
+    pfree(current);
 }
 
 
@@ -98,139 +82,200 @@ void ac_free_trie(ac_state* current)
  * Aho Corasick functions
  */
 
+/* ---- Edge helpers ---- */
 
-/* Creates a new Aho Corasick state */
-ac_state* ac_create_state(void)
+/* Binary search for an edge by character */
+static ac_edge* find_edge(ac_state *state, int ch)
 {
-    /* Allocate and initialize a new state */
-	ac_state* state = (ac_state*)palloc0(sizeof(ac_state)); 
-	state->is_final = false;
-	state->index = -1;
-    state->depth = 0;
-	state->fail_link = NULL;
-	return state;
+    int lo = 0, hi = state->edge_count - 1;
+    while (lo <= hi)
+    {
+        int mid = (lo + hi) / 2;
+        if (state->edges[mid].ch == ch)
+            return &state->edges[mid];
+        else if (state->edges[mid].ch < ch)
+            lo = mid + 1;
+        else
+            hi = mid - 1;
+    }
+    return NULL;
 }
 
 
-/* Adds a keyword to the trie */ 
+/* Add an edge, keeping edges sorted by character */
+static void add_edge(ac_state *state, int ch, ac_state *child)
+{
+    if (state->edge_count == state->edge_capacity)
+    {
+        int new_capacity = state->edge_capacity ? state->edge_capacity * 2 : 8;
+        if (state->edges == NULL)
+            state->edges = (ac_edge*) palloc(new_capacity * sizeof(ac_edge));
+        else
+            state->edges = (ac_edge*) repalloc(state->edges, new_capacity * sizeof(ac_edge));
+        state->edge_capacity = new_capacity;
+    }
+    int pos = state->edge_count;
+    while (pos > 0 && state->edges[pos-1].ch > ch)
+    {
+        state->edges[pos] = state->edges[pos-1];
+        pos--;
+    }
+    state->edges[pos].ch = ch;
+    state->edges[pos].child = child;
+    state->edge_count++;
+}
+
+
+/* ---- Trie operations ---- */
+
+/* Create a new state */
+ac_state* ac_create_state(void)
+{
+    ac_state* state = (ac_state*) palloc0(sizeof(ac_state));
+    state->is_final = false;
+    state->index = -1;
+    state->depth = 0;
+    state->fail_link = NULL;
+    state->dictionary_link = NULL;
+    state->edges = NULL;
+    state->edge_count = 0;
+    state->edge_capacity = 0;
+    return state;
+}
+
+
+/* Add a keyword to the trie (UTF-8 aware) */
 void ac_add_keyword(ac_state* root, const char* keyword, const int index)
 {
-	ac_state* current = root;
-    for (int i = 0; keyword[i]!= '\0'; i++)
+    ac_state* current = root;
+    const unsigned char *p = (const unsigned char*) keyword;
+    int depth = 0;
+    while (*p)
     {
-        if (current->children[keyword[i]] == NULL)
+        int ch = utf8_to_unicode(p);
+        p += pg_utf_mblen(p);
+
+        ac_edge *e = find_edge(current, ch);
+        if (!e)
         {
-            current->children[keyword[i]] = ac_create_state();
+            ac_state *child = ac_create_state();
+            add_edge(current, ch, child);
+            e = find_edge(current, ch);
         }
-        current = current->children[keyword[i]];
-        current->depth = i + 1;
+        current = e->child;
+        current->depth = ++depth;
     }
     current->is_final = true;
     current->index = index;
 }
 
 
-/* Builds failure links */ 
+/* Build failure links (BFS) */
 void ac_build_failure_links(ac_state* root)
-{
-	int queue_capacity= 16;
-	int queue_size = 0;
-	ac_state** queue = (ac_state**)palloc0(queue_capacity * sizeof(ac_state*));
-	int front = 0, rear = 0;
-	queue[rear++] = root;
-	queue_size++;
-
-	while(front < rear)
-	{
-		ac_state* current = queue[front++];
-        for (int i = 0; i < MAX_CHILDREN; i++)
-		{
-			ac_state* child = current->children[i];
-			if (child && current == root)
-				child->fail_link = root;
-			else if (child)
-			{
-				ac_state* fail = current->fail_link;
-                while(fail && !fail->children[i])
-					fail = fail->fail_link;
-				if (fail)
-					child->fail_link = fail->children[i];
-				else 
-					child->fail_link = root;
-			}
-			if (child)
-			{
-				if (queue_size == queue_capacity)
-				{
-					queue_capacity *= 2;
-					queue = (ac_state**)repalloc(queue, queue_capacity * sizeof(ac_state*));
-				}
-				queue[rear++] = child;
-				queue_size++;
-			}
-		}
-	}
-	pfree(queue);
-}
-
-
-/* Builds dictionary links */
-void ac_build_dictionary_links(ac_state* root)
 {
     int queue_capacity = 16;
     int queue_size = 0;
-    ac_state** queue = (ac_state**)palloc(queue_capacity * sizeof(ac_state*));
+    ac_state** queue = (ac_state**) palloc0(queue_capacity * sizeof(ac_state*));
     int front = 0, rear = 0;
 
-    for (int i = 0; i < MAX_CHILDREN; i++) 
-	{
-        if (root->children[i]) 
+    /* Initialize: children of root get fail_link = root */
+    for (int i = 0; i < root->edge_count; i++)
+    {
+        ac_state *child = root->edges[i].child;
+        child->fail_link = root;
+        if (queue_size == queue_capacity)
         {
-            if (queue_size == queue_capacity) 
-			{
-                queue_capacity *= 2;
-                queue = (ac_state**)repalloc(queue, queue_capacity * sizeof(ac_state*));
-            }
-            queue[rear++] = root->children[i];
-            queue_size++;
+            queue_capacity *= 2;
+            queue = (ac_state**) repalloc(queue, queue_capacity * sizeof(ac_state*));
         }
+        queue[rear++] = child;
+        queue_size++;
     }
 
-    while (front < rear) 
-	{
+    while (front < rear)
+    {
         ac_state* current = queue[front++];
-        ac_state* fail = current->fail_link;
-        if (fail && fail->is_final)
-		{
-            current->dictionary_link = current->fail_link;
-        } 
-		else if (current->fail_link && fail->dictionary_link)
-		{
-            current->dictionary_link = fail->dictionary_link;
-        } 
-		else
-		{
-            current->dictionary_link = NULL;
-        }
-        for (int i = 0; i < MAX_CHILDREN; i++) 
-		{
-            if (current->children[i]) 
+        for (int i = 0; i < current->edge_count; i++)
+        {
+            ac_edge *e = &current->edges[i];
+            int ch = e->ch;
+            ac_state *child = e->child;
+
+            ac_state *fail = current->fail_link;
+            while (fail && !find_edge(fail, ch))
+                fail = fail->fail_link;
+            if (fail)
             {
-                if (queue_size == queue_capacity) 
-				{
-                    queue_capacity *= 2;
-                    queue = (ac_state**)repalloc(queue, queue_capacity * sizeof(ac_state*));
-                }
-                queue[rear++] = current->children[i];
-                queue_size++;
+                ac_edge *fe = find_edge(fail, ch);
+                child->fail_link = fe ? fe->child : root;
             }
+            else
+            {
+                child->fail_link = root;
+            }
+
+            if (queue_size == queue_capacity)
+            {
+                queue_capacity *= 2;
+                queue = (ac_state**) repalloc(queue, queue_capacity * sizeof(ac_state*));
+            }
+            queue[rear++] = child;
+            queue_size++;
         }
     }
     pfree(queue);
 }
 
 
-/* Matches a text against the trie and counts the number of matches */
+/* Build dictionary links (BFS) */
+void ac_build_dictionary_links(ac_state* root)
+{
+    int queue_capacity = 16;
+    int queue_size = 0;
+    ac_state** queue = (ac_state**) palloc(queue_capacity * sizeof(ac_state*));
+    int front = 0, rear = 0;
+
+    /* Initialize: children of root */
+    for (int i = 0; i < root->edge_count; i++)
+    {
+        ac_state *child = root->edges[i].child;
+        if (queue_size == queue_capacity)
+        {
+            queue_capacity *= 2;
+            queue = (ac_state**) repalloc(queue, queue_capacity * sizeof(ac_state*));
+        }
+        queue[rear++] = child;
+        queue_size++;
+    }
+
+    while (front < rear)
+    {
+        ac_state* current = queue[front++];
+        ac_state* fail = current->fail_link;
+        if (fail && fail->is_final)
+            current->dictionary_link = fail;
+        else if (fail && fail->dictionary_link)
+            current->dictionary_link = fail->dictionary_link;
+        else
+            current->dictionary_link = NULL;
+
+        for (int i = 0; i < current->edge_count; i++)
+        {
+            ac_state *child = current->edges[i].child;
+            if (queue_size == queue_capacity)
+            {
+                queue_capacity *= 2;
+                queue = (ac_state**) repalloc(queue, queue_capacity * sizeof(ac_state*));
+            }
+            queue[rear++] = child;
+            queue_size++;
+        }
+    }
+    pfree(queue);
+}
+
+
+/* Match text and return indices of matched keywords */
 ac_match_result ac_match(ac_state* root, char* text)
 {
     ac_state* current = root;
@@ -238,21 +283,28 @@ ac_match_result ac_match(ac_state* root, char* text)
     int *matches = palloc(16 * sizeof(int));
     int *counts = palloc(16 * sizeof(int));
     int capacity = 16;
-    
-    for (int i = 0; text[i] != '\0'; i++) 
-    {	
-        unsigned char c = (unsigned char)text[i];
-        while (current && !current->children[c])
-        {
+    const unsigned char *p = (const unsigned char*) text;
+
+    while (*p)
+    {
+        int ch = utf8_to_unicode(p);
+        p += pg_utf_mblen(p);
+
+        while (current && !find_edge(current, ch))
             current = current->fail_link;
+        if (current)
+        {
+            ac_edge *e = find_edge(current, ch);
+            current = e ? e->child : root;
         }
-        current = current ? current->children[c] : root;
+        else
+            current = root;
 
         for (ac_state *temp = current; temp; temp = temp->dictionary_link)
         {
-            if (temp->is_final) 
+            if (temp->is_final)
             {
-                if (result.num_matches == capacity) 
+                if (result.num_matches == capacity)
                 {
                     capacity *= 2;
                     matches = repalloc(matches, capacity * sizeof(int));
@@ -264,64 +316,62 @@ ac_match_result ac_match(ac_state* root, char* text)
             }
         }
     }
-
     result.matches = matches;
     result.counts = counts;
     return result;
 }
 
 
-/*
- * Searches for a given text in the trie 
- * (at least one match and not necessarily the same as in the text)
- * and immediately returns if found 
- */
-bool ac_contains(ac_state *root, const char *text) 
+/* Check if any keyword appears in the text (early exit) */
+bool ac_contains(ac_state *root, const char *text)
 {
     ac_state *current = root;
-    for (int i = 0; text[i] != '\0'; i++)
+    const unsigned char *p = (const unsigned char*) text;
+    while (*p)
     {
-        unsigned char c = (unsigned char)text[i];
-        while (current && !current->children[c])
-        {
+        int ch = utf8_to_unicode(p);
+        p += pg_utf_mblen(p);
+
+        while (current && !find_edge(current, ch))
             current = current->fail_link;
-        }
-        current = current ? current->children[c] : root;
-        
-        for (ac_state *temp = current; temp; temp = temp->dictionary_link)
+        if (current)
         {
+            ac_edge *e = find_edge(current, ch);
+            current = e ? e->child : root;
+        }
+        else
+            current = root;
+
+        for (ac_state *temp = current; temp; temp = temp->dictionary_link)
             if (temp->is_final)
                 return true;
-        }
     }
     return false;
 }
 
 
-/* Helper function for ac_search (recursive) */
-bool evaluate_query(QueryItem *item, TSQuery tsq, ac_automaton *automaton) 
+/* Recursive query evaluation */
+bool evaluate_query(QueryItem *item, TSQuery tsq, ac_automaton *automaton)
 {
-    /* If the item is a value */ 
-    if (item->type == QI_VAL)            
+    if (item->type == QI_VAL)
     {
         char *lexeme;
         bool found;
-        /* Get lexeme from TSQuery */
-        lexeme = pnstrdup(GETOPERAND(tsq) + item->qoperand.distance, item->qoperand.length);  
-        /* Look for that lexeme in the trie*/
-        found = ac_contains(automaton->root, lexeme);                                          
+        lexeme = pnstrdup(GETOPERAND(tsq) + item->qoperand.distance, item->qoperand.length);
+        found = ac_contains(automaton->root, lexeme);
         pfree(lexeme);
         return found;
     }
-    /* If the item is an operator */
-    else if (item->type == QI_OPR)   
+    else if (item->type == QI_OPR)
     {
-        switch (item->qoperator.oper) 
+        switch (item->qoperator.oper)
         {
             case OP_AND:
-                return evaluate_query(item + item->qoperator.left, tsq, automaton) && evaluate_query(item + 1, tsq, automaton);
+                return evaluate_query(item + item->qoperator.left, tsq, automaton) &&
+                       evaluate_query(item + 1, tsq, automaton);
             case OP_OR:
-                return evaluate_query(item + item->qoperator.left, tsq, automaton) || evaluate_query(item + 1, tsq, automaton);
+                return evaluate_query(item + item->qoperator.left, tsq, automaton) ||
+                       evaluate_query(item + 1, tsq, automaton);
             case OP_NOT:
                 return !evaluate_query(item + item->qoperator.left, tsq, automaton);
             default:
@@ -333,28 +383,22 @@ bool evaluate_query(QueryItem *item, TSQuery tsq, ac_automaton *automaton)
 
 
 /*
- * PostgreSQL-specific functions
+ * PostgreSQL‑specific functions
  */
 
-
-/* Init Aho Corasick automaton storage */
 Datum ac_init(PG_FUNCTION_ARGS)
 {
     _ac_init();
     PG_RETURN_BOOL(true);
 }
 
-
-/* Fini Aho Corasick automaton storage */
 Datum ac_fini(PG_FUNCTION_ARGS)
 {
     _ac_fini();
     PG_RETURN_BOOL(true);
 }
 
-
-/* Build Aho Corasick automaton */
-Datum ac_build_tsvector(PG_FUNCTION_ARGS) 
+Datum ac_build_tsvector(PG_FUNCTION_ARGS)
 {
     TSVector tsv = PG_GETARG_TSVECTOR_COPY(0);
     WordEntry *entries = ARRPTR(tsv);
@@ -365,31 +409,28 @@ Datum ac_build_tsvector(PG_FUNCTION_ARGS)
 
     oldctx = MemoryContextSwitchTo(TopMemoryContext);
 
-    /* Initialize automaton */
-    automaton = (ac_automaton *)palloc0(sizeof(ac_automaton));
+    automaton = (ac_automaton *) palloc0(sizeof(ac_automaton));
     automaton->num_lexemes = tsv->size;
     automaton->root = ac_create_state();
 
-    /* Add keywords with their original positional indexes */
-    for (int i = 0; i < tsv->size; i++) 
+    for (int i = 0; i < tsv->size; i++)
     {
-        WordEntry *entry = &entries[i];
-        char *lexeme = pnstrdup(STRPTR(tsv) + entry->pos, entry->len);
+        WordEntry *we = &entries[i];
+        char *lexeme = pnstrdup(STRPTR(tsv) + we->pos, we->len);
         int32 index = -1;
 
-        /* Extract the first positional index from tsvector */
-        if (entry->haspos) 
+        if (we->haspos)
         {
-            uint16      npos = POSDATALEN(tsv, entry);
-            WordEntryPos *pos_ptr = POSDATAPTR(tsv, entry);
+            uint16 npos = POSDATALEN(tsv, we);
+            WordEntryPos *pos_ptr = POSDATAPTR(tsv, we);
             if (npos > 0)
                 index = (int32) WEP_GETPOS(pos_ptr[0]);
         }
 
         if (index == -1)
-            ereport(ERROR, (errcode(ERRCODE_DATA_EXCEPTION), errmsg("tsvector entry has no positional data")));
+            ereport(ERROR, (errcode(ERRCODE_DATA_EXCEPTION),
+                            errmsg("tsvector entry has no positional data")));
 
-        /* Add to trie with the extracted index */
         ac_add_keyword(automaton->root, lexeme, index);
         pfree(lexeme);
     }
@@ -397,7 +438,6 @@ Datum ac_build_tsvector(PG_FUNCTION_ARGS)
     ac_build_failure_links(automaton->root);
     ac_build_dictionary_links(automaton->root);
 
-    /* Store automaton */
     id = next_automaton_id++;
     entry = hash_search(automaton_storage, &id, HASH_ENTER, NULL);
     entry->id = id;
@@ -406,7 +446,6 @@ Datum ac_build_tsvector(PG_FUNCTION_ARGS)
     MemoryContextSwitchTo(oldctx);
     PG_RETURN_INT64(id);
 }
-
 
 Datum ac_build_array(PG_FUNCTION_ARGS)
 {
@@ -420,22 +459,21 @@ Datum ac_build_array(PG_FUNCTION_ARGS)
     int nlexemes;
     int i;
 
-    /* Get array elements */
-    deconstruct_array(input_array, TEXTOID, -1, false, 'i', &lexeme_datums, &nulls, &nlexemes);
+    deconstruct_array(input_array, TEXTOID, -1, false, 'i',
+                      &lexeme_datums, &nulls, &nlexemes);
 
     oldctx = MemoryContextSwitchTo(TopMemoryContext);
 
-    /* Initialize automaton */
-    automaton = (ac_automaton *)palloc0(sizeof(ac_automaton));
+    automaton = (ac_automaton *) palloc0(sizeof(ac_automaton));
     automaton->num_lexemes = nlexemes;
     automaton->root = ac_create_state();
 
-    /* Add lexemes with array indexes */
-    for (i = 0; i < nlexemes; i++) 
+    for (i = 0; i < nlexemes; i++)
     {
         char *lexeme;
         if (nulls[i])
-            ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED), errmsg("array element cannot be NULL")));
+            ereport(ERROR, (errcode(ERRCODE_NULL_VALUE_NOT_ALLOWED),
+                            errmsg("array element cannot be NULL")));
 
         lexeme = TextDatumGetCString(lexeme_datums[i]);
         ac_add_keyword(automaton->root, lexeme, i + 1);
@@ -445,7 +483,6 @@ Datum ac_build_array(PG_FUNCTION_ARGS)
     ac_build_failure_links(automaton->root);
     ac_build_dictionary_links(automaton->root);
 
-    /* Store automaton */
     id = next_automaton_id++;
     entry = hash_search(automaton_storage, &id, HASH_ENTER, NULL);
     entry->id = id;
@@ -455,32 +492,22 @@ Datum ac_build_array(PG_FUNCTION_ARGS)
     PG_RETURN_INT64(id);
 }
 
-
-/* Destroy Aho Corasick automaton */
 Datum ac_destroy(PG_FUNCTION_ARGS)
 {
-    int64 id = PG_GETARG_INT64(0); 
+    int64 id = PG_GETARG_INT64(0);
     bool found;
     ac_automaton_entry *entry;
 
-    /* Look for the automaton*/
     entry = hash_search(automaton_storage, &id, HASH_FIND, &found);
-
-    /* If not found, return false */
     if (!found)
         PG_RETURN_BOOL(false);
 
-    /* Else, destroy */
     ac_free_trie(entry->automaton->root);
     hash_search(automaton_storage, &id, HASH_REMOVE, NULL);
-    
-    /* Return true */
     PG_RETURN_BOOL(true);
 }
 
-
-/* Search in Aho Corasick automaton using TSQuery */
-Datum ac_search_tsquery(PG_FUNCTION_ARGS) 
+Datum ac_search_tsquery(PG_FUNCTION_ARGS)
 {
     int64 id = PG_GETARG_INT64(0);
     TSQuery tsq = PG_GETARG_TSQUERY(1);
@@ -489,24 +516,16 @@ Datum ac_search_tsquery(PG_FUNCTION_ARGS)
     QueryItem *items;
     bool result = false;
 
-    /* Look for the automaton */ 
     entry = hash_search(automaton_storage, &id, HASH_FIND, &found);
-
-    /* If not found, return false */
     if (!found)
         PG_RETURN_BOOL(false);
 
-    /* Else, evaluate */
     items = GETQUERY(tsq);
     result = evaluate_query(items, tsq, entry->automaton);
-
-    /* Return result */
     PG_RETURN_BOOL(result);
 }
 
-
-/* Search in Aho Corasick automaton using text */
-Datum ac_search_text(PG_FUNCTION_ARGS) 
+Datum ac_search_text(PG_FUNCTION_ARGS)
 {
     int64 id = PG_GETARG_INT64(0);
     text *input = PG_GETARG_TEXT_PP(1);
@@ -515,24 +534,18 @@ Datum ac_search_text(PG_FUNCTION_ARGS)
     char *text_str;
     bool result = false;
 
-    /* Look for the automaton */
     entry = hash_search(automaton_storage, &id, HASH_FIND, &found);
-
-    /* If not found, return false */
     if (!found)
         PG_RETURN_BOOL(false);
 
-    /* Else, evaluate */
     text_str = text_to_cstring(input);
     result = ac_contains(entry->automaton->root, text_str);
     pfree(text_str);
 
-    /* Return result */
     PG_RETURN_BOOL(result);
 }
 
-
-Datum ac_match_text(PG_FUNCTION_ARGS) 
+Datum ac_match_text(PG_FUNCTION_ARGS)
 {
     int64 id = PG_GETARG_INT64(0);
     text *input = PG_GETARG_TEXT_PP(1);
@@ -546,28 +559,23 @@ Datum ac_match_text(PG_FUNCTION_ARGS)
     bool found;
     ac_automaton_entry *entry;
 
-    /* Lookup automaton */
     entry = hash_search(automaton_storage, &id, HASH_FIND, &found);
     if (!found)
         PG_RETURN_NULL();
 
-    /* Get matches */
     result = ac_match(entry->automaton->root, text_str);
-    
-    /* Convert matches to PostgreSQL array */
+
     if (result.num_matches == 0)
         PG_RETURN_NULL();
 
-    elements = (Datum *)palloc(sizeof(Datum) * result.num_matches);
-    for (int i = 0; i < result.num_matches; i++) 
-    {
+    elements = (Datum *) palloc(sizeof(Datum) * result.num_matches);
+    for (int i = 0; i < result.num_matches; i++)
         elements[i] = Int32GetDatum(result.matches[i]);
-    }
 
     get_typlenbyvalalign(INT4OID, &elmlen, &elmbyval, &elmalign);
-    array = construct_array(elements, result.num_matches, INT4OID, elmlen, elmbyval, elmalign);
+    array = construct_array(elements, result.num_matches, INT4OID,
+                            elmlen, elmbyval, elmalign);
 
-    /* Cleanup */
     pfree(result.matches);
     pfree(result.counts);
     pfree(text_str);
@@ -575,7 +583,6 @@ Datum ac_match_text(PG_FUNCTION_ARGS)
 
     PG_RETURN_ARRAYTYPE_P(array);
 }
-
 
 Datum ac_rank_simple(PG_FUNCTION_ARGS)
 {
@@ -587,23 +594,17 @@ Datum ac_rank_simple(PG_FUNCTION_ARGS)
     ac_match_result result;
     float4 score;
 
-    /* Look for the automaton */ 
     entry = hash_search(automaton_storage, &id, HASH_FIND, &found);
-
-    /* If not found, return false */ 
     if (!found)
         PG_RETURN_NULL();
 
-    /* Else, evaluate */ 
     text_str = text_to_cstring(input);
     result = ac_match(entry->automaton->root, text_str);
-    score = (float)result.num_matches / entry->automaton->num_lexemes;
+    score = (float) result.num_matches / entry->automaton->num_lexemes;
 
-    /* Clean up */
     pfree(result.matches);
     pfree(result.counts);
     pfree(text_str);
 
-    /* Return score */
     PG_RETURN_FLOAT4(score);
 }
