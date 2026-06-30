@@ -10,13 +10,12 @@
 
 ✅ Rank – simple relevance score (ratio of matched keywords)
 
-✅ Dynamic – add or remove keywords on the fly (full rebuild)
+✅ Dynamic – add or remove keywords on the fly
 
 ✅ Persistent – serialize automaton to bytea and restore later
 
-✅ UTF‑8 aware – works with Unicode characters (Cyrillic, diacritics, etc.)
+✅ UTF‑8 support – works with Unicode character
 
-✅ Memory efficient – uses sorted edge arrays instead of 256‑slot tables per node
 
 
 # Installation
