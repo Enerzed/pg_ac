@@ -8,7 +8,7 @@
  * Init and fini
  */
 void _PG_init(void) { /* called on load – we do nothing, user must call ac_init() */ }
-void _PG_fini(void) { /* called on unload – we do nothing, user must call ac_fini() */ }
+void _PG_fini(void) { /* should be called on unload – we do nothing, user must call ac_fini() */ }
 
 /*
  * Memory management
