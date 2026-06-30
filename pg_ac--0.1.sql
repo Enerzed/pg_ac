@@ -21,6 +21,16 @@ RETURNS bigint
 AS 'pg_ac', 'ac_build_array'
 LANGUAGE C STRICT;
 
+CREATE OR REPLACE FUNCTION ac_add(bigint, text)
+RETURNS boolean
+AS 'pg_ac', 'ac_add'
+LANGUAGE C STRICT;
+
+CREATE OR REPLACE FUNCTION ac_remove(bigint, text)
+RETURNS boolean
+AS 'pg_ac', 'ac_remove'
+LANGUAGE C STRICT;
+
 CREATE OR REPLACE FUNCTION ac_destroy(bigint)
 RETURNS boolean
 AS 'pg_ac', 'ac_destroy'
