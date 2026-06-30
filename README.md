@@ -1,5 +1,6 @@
-**Features**
+# pg_ac
 
+# Features
 
 ✅ Build automata from tsvector or text[]
 
@@ -18,7 +19,7 @@
 ✅ Memory efficient – uses sorted edge arrays instead of 256‑slot tables per node
 
 
-**Installation**
+# Installation
 
 **From source**
 
@@ -33,13 +34,13 @@ sudo make install
 ```sql
 CREATE EXTENSION pg_ac;
 ```
-**Requirements**
+# Requirements
 
 PostgreSQL 12 or later
 C compiler with C99 support
 pg_config available in PATH
 
-**Getting started**
+# Getting started
 
 After creating the extension, you must initialize the global automaton storage (per‑session memory):
 
@@ -47,7 +48,7 @@ After creating the extension, you must initialize the global automaton storage (
 SELECT ac_init();
 ```
 This creates an internal hash table that will hold all automatons created in the current session.
-Note: Automata exist only for the lifetime of the session. To persist them across sessions, use serialization (see below).
+Note: Automatons exist only for the lifetime of the session. To persist them across sessions, use serialization (see below).
 
 **Building automatons**
 
@@ -96,7 +97,7 @@ SELECT ac_match(1, 'The quick brown fox jumps over the lazy dog');
 ```
 Returns an array of all keyword indices that appear in the text, in the order they are encountered. Duplicates are preserved (if the same keyword appears multiple times, its index appears multiple times).
 
-Simple ranking
+**Simple ranking**
 
 ```sql
 SELECT ac_rank_simple(1, 'The quick brown fox');
@@ -164,7 +165,7 @@ SELECT ac_fini();
 ```
 Destroys all automata in the current session and deinitialises the storage. After this, you must call ac_init() again if you want to create new automata.
 
-Full example session
+**Full example session**
 
 ```sql
 -- 1. Init
@@ -202,22 +203,15 @@ SELECT ac_deserialize( (SELECT data FROM automaton_backup WHERE id = 1) );  -- r
 SELECT ac_fini();
 ```
 
-**Notes and limitations**
-
-Session‑local storage – automata reside in memory (TopMemoryContext) and are lost when the session ends. Use serialization for persistence.
-UTF‑8 support – all functions handle Unicode correctly; keywords and texts are processed code‑point by code‑point.
-Performance – matching is O(text length + number of matches). Rebuilding (after ac_add/ac_remove) is O(total length of all keywords), so batch updates when possible.
-Index stability – indices assigned to keywords never change, even after deletion/additions. This makes ac_match results consistent across sessions.
-Memory – the automaton uses a compact edge‑array representation, which is more memory‑efficient than a full 256‑slot table per node.
-License
+**License**
 
 This project is licensed under the PostgreSQL License – see the LICENSE file for details.
 
-Contributing
+**Contributing**
 
 Bug reports, feature requests, and pull requests are welcome. Please open an issue or submit a PR on GitHub.
 
-Acknowledgements
+**Acknowledgements**
 
 The Aho‑Corasick algorithm is described in Efficient String Matching: An Aid to Bibliographic Search by Aho and Corasick (1975).
 This extension was inspired by the need for fast multi‑pattern matching inside PostgreSQL without external dependencies.
