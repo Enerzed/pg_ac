@@ -1,13 +1,21 @@
 Features
 
 ✅ Build automata from tsvector or text[]
+
 ✅ Search using plain text or tsquery with boolean operators (AND, OR, NOT)
+
 ✅ Match – get all matched keyword positions (indices)
+
 ✅ Rank – simple relevance score (ratio of matched keywords)
+
 ✅ Dynamic – add or remove keywords on the fly (full rebuild)
+
 ✅ Persistent – serialize automata to bytea and restore later
+
 ✅ UTF‑8 aware – works with Unicode characters (Cyrillic, diacritics, etc.)
+
 ✅ Memory efficient – uses sorted edge arrays instead of 256‑slot tables per node
+
 
 Installation
 
