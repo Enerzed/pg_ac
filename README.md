@@ -2,7 +2,7 @@
 
 # Features
 
-✅ Build automata from tsvector or text[]
+✅ Build automatons from tsvector or text[]
 
 ✅ Search using plain text or tsquery with boolean operators (AND, OR, NOT)
 
@@ -12,7 +12,7 @@
 
 ✅ Dynamic – add or remove keywords on the fly (full rebuild)
 
-✅ Persistent – serialize automata to bytea and restore later
+✅ Persistent – serialize automaton to bytea and restore later
 
 ✅ UTF‑8 aware – works with Unicode characters (Cyrillic, diacritics, etc.)
 
@@ -128,7 +128,7 @@ After an update, the automaton is immediately ready for searching. The indices o
 
 **Persistence (serialization)**
 
-Automata live only in the session memory. To save them permanently, you can serialize an automaton to a bytea blob and later deserialize it.
+automaton live only in the session memory. To save them permanently, you can serialize an automaton to a bytea blob and later deserialize it.
 
 **Serialize to bytea**
 
@@ -138,14 +138,14 @@ SELECT ac_serialize(1) AS blob;
 Returns a bytea value that contains the complete automaton (keywords and indices). You can store this in a table:
 
 ```sql
-CREATE TABLE saved_automata (id SERIAL PRIMARY KEY, data BYTEA);
-INSERT INTO saved_automata (data) SELECT ac_serialize(1);
+CREATE TABLE saved_automaton (id SERIAL PRIMARY KEY, data BYTEA);
+INSERT INTO saved_automaton (data) SELECT ac_serialize(1);
 ```
 
 **Deserialize from bytea**
 
 ```sql
-SELECT ac_deserialize( (SELECT data FROM saved_automata WHERE id = 1) );
+SELECT ac_deserialize( (SELECT data FROM saved_automaton WHERE id = 1) );
 ```
 This creates a new automaton in the current session, assigns a fresh ID, and returns it. The restored automaton is fully functional.
 
@@ -163,7 +163,7 @@ Frees all memory associated with the automaton and removes it from the session s
 ```sql
 SELECT ac_fini();
 ```
-Destroys all automata in the current session and deinitialises the storage. After this, you must call ac_init() again if you want to create new automata.
+Destroys all automaton in the current session and deinitialises the storage. After this, you must call ac_init() again if you want to create new automaton.
 
 **Full example session**
 
