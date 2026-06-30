@@ -40,6 +40,8 @@
 #include <ctype.h>
 #include <funcapi.h>
 
+#include <arpa/inet.h>
+
 #define MAX_LEXEME_SIZE 256
 #define INITIAL_NELEM 256
 
@@ -141,6 +143,8 @@ Datum ac_search_tsquery(PG_FUNCTION_ARGS);
 Datum ac_search_text(PG_FUNCTION_ARGS);
 Datum ac_match_text(PG_FUNCTION_ARGS);
 Datum ac_rank_simple(PG_FUNCTION_ARGS);
+Datum ac_serialize(PG_FUNCTION_ARGS);
+Datum ac_deserialize(PG_FUNCTION_ARGS);
 
 /*
  * Function info declarations
@@ -156,3 +160,5 @@ PG_FUNCTION_INFO_V1(ac_search_tsquery);
 PG_FUNCTION_INFO_V1(ac_search_text);
 PG_FUNCTION_INFO_V1(ac_match_text);
 PG_FUNCTION_INFO_V1(ac_rank_simple);
+PG_FUNCTION_INFO_V1(ac_serialize);
+PG_FUNCTION_INFO_V1(ac_deserialize);

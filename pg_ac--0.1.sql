@@ -55,3 +55,13 @@ CREATE OR REPLACE FUNCTION ac_rank_simple(bigint, text)
 RETURNS real
 AS 'pg_ac', 'ac_rank_simple'
 LANGUAGE C STRICT;
+
+CREATE OR REPLACE FUNCTION ac_serialize(bigint)
+RETURNS bytea
+AS 'pg_ac', 'ac_serialize'
+LANGUAGE C STRICT;
+
+CREATE OR REPLACE FUNCTION ac_deserialize(bytea)
+RETURNS bigint
+AS 'pg_ac', 'ac_deserialize'
+LANGUAGE C STRICT;

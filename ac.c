@@ -753,3 +753,150 @@ Datum ac_rank_simple(PG_FUNCTION_ARGS)
 
 	PG_RETURN_FLOAT4(score);
 }
+
+#include <arpa/inet.h>  /* для htonl/ntohl */
+
+/* Serialize automaton into bytea */
+Datum ac_serialize(PG_FUNCTION_ARGS)
+{
+    int64 id = PG_GETARG_INT64(0);
+    bool found;
+    ac_automaton_entry *entry;
+    ac_automaton *automaton;
+    StringInfoData buf;
+    int64 i;
+
+    entry = hash_search(automaton_storage, &id, HASH_FIND, &found);
+    if (!found)
+        PG_RETURN_NULL();
+
+    automaton = entry->automaton;
+    if (automaton->dirty)
+        ac_rebuild_automaton(automaton);
+
+    /* Init binary buffer */
+    initStringInfo(&buf);
+
+    /* Magic number and version */
+    int32 magic = 0xACACACAC;
+    int32 version = 1;
+    appendBinaryStringInfo(&buf, (char *) &magic, sizeof(magic));
+    appendBinaryStringInfo(&buf, (char *) &version, sizeof(version));
+
+    /* Keywords number */
+    int64 count = automaton->keyword_count;
+    appendBinaryStringInfo(&buf, (char *) &count, sizeof(count));
+
+    /* Save each word */
+    for (i = 0; i < count; i++)
+    {
+        char *kw = automaton->keywords[i].keyword;
+        int64 len = strlen(kw);
+        int64 idx = automaton->keywords[i].index;
+
+        /* 4 bytes for string length */
+        int32 net_len = htonl((uint32) len);
+        appendBinaryStringInfo(&buf, (char *) &net_len, sizeof(net_len));
+        /* String itself */
+        appendBinaryStringInfo(&buf, kw, len);
+        /* Index (8 байт) */
+        appendBinaryStringInfo(&buf, (char *) &idx, sizeof(idx));
+    }
+
+    /* return bytea */
+    bytea *result = (bytea *) palloc(buf.len + VARHDRSZ);
+    SET_VARSIZE(result, buf.len + VARHDRSZ);
+    memcpy(VARDATA(result), buf.data, buf.len);
+    pfree(buf.data);
+
+    PG_RETURN_BYTEA_P(result);
+}
+
+/* Deserialize from bytea into an automaton */
+Datum ac_deserialize(PG_FUNCTION_ARGS)
+{
+    bytea *blob = PG_GETARG_BYTEA_P(0);
+    char *data = VARDATA(blob);
+    int64 len = VARSIZE(blob) - VARHDRSZ;
+    int64 pos = 0;
+
+    /* Check magic number and version */
+    if (len < 8) ereport(ERROR, (errmsg("invalid serialized data")));
+    int32 magic;
+    memcpy(&magic, data + pos, sizeof(magic));
+    pos += sizeof(magic);
+    if (magic != 0xACACACAC)
+        ereport(ERROR, (errmsg("invalid magic number in serialized data")));
+
+    int32 version;
+    memcpy(&version, data + pos, sizeof(version));
+    pos += sizeof(version);
+    if (version != 1)
+        ereport(ERROR, (errmsg("unsupported version %d", version)));
+
+    /* Keyword count */
+    int64 count;
+    memcpy(&count, data + pos, sizeof(count));
+    pos += sizeof(count);
+    if (count < 0 || count > 1000000000) /* sanity */
+        ereport(ERROR, (errmsg("invalid word count")));
+
+    /* Create new automaton */
+    MemoryContext oldctx = MemoryContextSwitchTo(TopMemoryContext);
+    ac_automaton *automaton = (ac_automaton *) palloc0(sizeof(ac_automaton));
+    automaton->num_lexemes = count;
+    automaton->next_index = 1;
+    automaton->dirty = false;
+    automaton->keyword_count = count;
+    automaton->keyword_capacity = count;
+    automaton->keywords = (ac_keyword *) palloc(count * sizeof(ac_keyword));
+    automaton->root = ac_create_state();
+
+    int64 i;
+    for (i = 0; i < count; i++)
+    {
+        /* Keyword length */
+        int32 net_len;
+        if (pos + sizeof(net_len) > len)
+            ereport(ERROR, (errmsg("truncated data")));
+        memcpy(&net_len, data + pos, sizeof(net_len));
+        pos += sizeof(net_len);
+        int64 kw_len = ntohl(net_len);
+
+        if (pos + kw_len > len)
+            ereport(ERROR, (errmsg("truncated data")));
+        char *kw = (char *) palloc(kw_len + 1);
+        memcpy(kw, data + pos, kw_len);
+        kw[kw_len] = '\0';
+        pos += kw_len;
+
+        /* Index */
+        int64 idx;
+        if (pos + sizeof(idx) > len)
+            ereport(ERROR, (errmsg("truncated data")));
+        memcpy(&idx, data + pos, sizeof(idx));
+        pos += sizeof(idx);
+
+        /* Save to list */
+        automaton->keywords[i].keyword = kw;
+        automaton->keywords[i].index = idx;
+        if (idx >= automaton->next_index)
+            automaton->next_index = idx + 1;
+
+        /* Add to trie */
+        ac_add_keyword(automaton->root, kw, idx);
+    }
+
+    /* Build links */
+    ac_build_failure_links(automaton->root);
+    ac_build_dictionary_links(automaton->root);
+
+    /* Register in hash table */
+    int64 new_id = next_automaton_id++;
+    ac_automaton_entry *entry = hash_search(automaton_storage, &new_id, HASH_ENTER, NULL);
+    entry->id = new_id;
+    entry->automaton = automaton;
+
+    MemoryContextSwitchTo(oldctx);
+    PG_RETURN_INT64(new_id);
+}
